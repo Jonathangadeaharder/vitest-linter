@@ -279,3 +279,44 @@ impl Rule for ReturnInTestRule {
             .collect()
     }
 }
+
+pub struct MissingAwaitAssertionRule;
+
+impl Rule for MissingAwaitAssertionRule {
+    fn id(&self) -> &'static str {
+        "VITEST-MNT-006"
+    }
+    fn name(&self) -> &'static str {
+        "MissingAwaitAssertionRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    fn category(&self) -> Category {
+        Category::Maintenance
+    }
+    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+        module
+            .test_blocks
+            .iter()
+            .filter(|tb| tb.unawaited_async_assertions > 0)
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "Test has {} unawaited async assertions — these will fail silently",
+                    tb.unawaited_async_assertions
+                ),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Add await before expect() for .resolves or .rejects assertions".to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
+    }
+}

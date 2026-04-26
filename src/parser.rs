@@ -175,6 +175,7 @@ impl TsParser {
             is_skipped: is_skip,
             is_nested: describe_depth > 1,
             has_return_statement: st.has_return,
+            unawaited_async_assertions: st.unawaited_async_assertions,
         })
     }
 
@@ -191,6 +192,24 @@ impl TsParser {
         }
     }
 
+    fn is_awaited(node: Node) -> bool {
+        let mut curr = node;
+        while let Some(parent) = curr.parent() {
+            if parent.kind() == "await_expression" {
+                return true;
+            }
+            if parent.kind() == "expression_statement"
+                || parent.kind() == "lexical_declaration"
+                || parent.kind() == "variable_declaration"
+                || parent.kind() == "statement_block"
+            {
+                break;
+            }
+            curr = parent;
+        }
+        false
+    }
+
     fn analyze(node: Node, source: &str) -> Analysis {
         let mut st = Analysis::default();
         Self::walk_body(node, source, &mut st);
@@ -204,6 +223,11 @@ impl TsParser {
                 let text = func.utf8_text(source.as_bytes()).unwrap_or("");
                 if text.starts_with("expect") {
                     st.assertion_count += 1;
+                    if (text.contains(".resolves") || text.contains(".rejects"))
+                        && !Self::is_awaited(node)
+                    {
+                        st.unawaited_async_assertions += 1;
+                    }
                 }
                 if text == "setTimeout" {
                     st.uses_settimeout = true;
@@ -252,6 +276,7 @@ struct Analysis {
     uses_settimeout: bool,
     uses_datemock: bool,
     has_return: bool,
+    unawaited_async_assertions: usize,
 }
 
 #[cfg(test)]

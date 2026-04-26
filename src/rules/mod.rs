@@ -24,6 +24,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::EmptyTestRule),
         Box::new(maintenance::NestedDescribeRule),
         Box::new(maintenance::ReturnInTestRule),
+        Box::new(maintenance::MissingAwaitAssertionRule),
     ]
 }
 
@@ -34,7 +35,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 10);
+        assert_eq!(rules.len(), 11);
     }
 
     #[test]
@@ -51,6 +52,7 @@ mod tests {
             "VITEST-MNT-005",
             "VITEST-STR-001",
             "VITEST-STR-002",
+            "VITEST-MNT-006",
         ];
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         for id in &expected {
@@ -84,7 +86,7 @@ mod tests {
             .filter(|r| r.category() == Category::Structure)
             .collect();
         assert_eq!(flk.len(), 3);
-        assert_eq!(mnt.len(), 5);
+        assert_eq!(mnt.len(), 6);
         assert_eq!(str_.len(), 2);
     }
 
@@ -102,6 +104,7 @@ mod tests {
             ("VITEST-MNT-005", "EmptyTestRule"),
             ("VITEST-STR-001", "NestedDescribeRule"),
             ("VITEST-STR-002", "ReturnInTestRule"),
+            ("VITEST-MNT-006", "MissingAwaitAssertionRule"),
         ];
         for (id, name) in &expected {
             let rule = rules.iter().find(|r| r.id() == *id).unwrap();

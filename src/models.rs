@@ -71,6 +71,7 @@ pub struct TestBlock {
     pub is_skipped: bool,
     pub is_nested: bool,
     pub has_return_statement: bool,
+    pub unawaited_async_assertions: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -80,3 +81,4 @@ pub struct ParsedModule {
     pub test_blocks: Vec<TestBlock>,
     pub has_fake_timers: bool,
 }
+// test

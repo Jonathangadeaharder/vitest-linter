@@ -1360,3 +1360,23 @@ console.log('hello');
     let module = parse(&path);
     assert_eq!(module.test_blocks.len(), 1);
 }
+
+#[test]
+fn mnt006_missing_await_assertion() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = write_fixture(
+        &dir,
+        "async_fail.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('missing await', async () => {
+    expect(Promise.resolve(1)).resolves.toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-006");
+    assert!(v.is_some(), "Expected VITEST-MNT-006 violation");
+}
