@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check vitest-linter
+        run: cargo fmt --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy vitest-linter
+        run: cargo +nightly clippy --lib -- -W clippy::all -W clippy::pedantic -W clippy::nursery
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test vitest-linter
+        run: cargo test
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Coverage vitest-linter
+        run: cargo +nightly llvm-cov --fail-under-lines 90
+
+  dogfood:
+    name: Dogfood
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release
+        run: cargo build --release
+      - name: Create vitest test file with smells
+        run: |
+          cat > /tmp/test_smell.test.ts << 'TSEOF'
+          import { describe, it, expect, vi } from "vitest";
+
+          describe("bad", () => {
+            it("has timeout", async () => {
+              await new Promise((r) => setTimeout(r, 5000));
+              expect(true).toBe(true);
+            }, 10000);
+          });
+          TSEOF
+      - name: Run vitest-linter on smell file
+        run: |
+          ./target/release/vitest-linter --format json /tmp/test_smell.test.ts > /tmp/vitest-result.json
+          violations=$(python3 -c "import json,sys; print(len(json.load(sys.stdin)))" < /tmp/vitest-result.json)
+          echo "vitest-linter found $violations violations"
+          [ "$violations" -gt 0 ]
