@@ -869,6 +869,82 @@ test('has timeout', () => {
 }
 
 #[test]
+fn flk004_fake_timers_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_no_cleanup.test.ts",
+        r#"
+import { test, expect, vi } from 'vitest';
+
+test('uses fake timers', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-FLK-004");
+    assert!(v.is_some(), "Expected VITEST-FLK-004 violation");
+    assert_eq!(v.unwrap().rule_name, "FakeTimersCleanupRule");
+}
+
+#[test]
+fn flk004_fake_timers_with_after_each_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_safe.test.ts",
+        r#"
+import { test, expect, vi, afterEach } from 'vitest';
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+test('uses fake timers safely', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-004").is_none(),
+        "Should not trigger FLK-004 when afterEach has vi.restoreAllMocks()"
+    );
+}
+
+#[test]
+fn flk004_fake_timers_with_use_real_timers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_real.test.ts",
+        r#"
+import { test, expect, vi, afterEach } from 'vitest';
+
+afterEach(() => {
+    vi.useRealTimers();
+});
+
+test('uses fake timers', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-004").is_none(),
+        "Should not trigger FLK-004 when afterEach has vi.useRealTimers()"
+    );
+}
+
+#[test]
 fn parser_switch_statement_conditional() {
     let dir = TempDir::new().unwrap();
     let path = write_fixture(

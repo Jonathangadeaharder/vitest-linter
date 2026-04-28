@@ -404,6 +404,7 @@ impl TsParser {
             is_nested: describe_depth > 1,
             has_return_statement: st.has_return,
             unawaited_async_assertions: st.unawaited_async_assertions,
+            uses_fake_timers: st.uses_fake_timers,
         })
     }
 
@@ -475,6 +476,9 @@ impl TsParser {
                 if text.starts_with("Date.") {
                     st.uses_datemock = true;
                 }
+                if text == "vi.useFakeTimers" {
+                    st.uses_fake_timers = true;
+                }
                 let args = node.child_by_field_name("arguments").unwrap();
                 for i in 0..args.named_child_count() {
                     let child = args.named_child(i).unwrap();
@@ -517,6 +521,7 @@ struct Analysis {
     uses_datemock: bool,
     has_return: bool,
     unawaited_async_assertions: usize,
+    uses_fake_timers: bool,
 }
 
 #[cfg(test)]

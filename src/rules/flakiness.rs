@@ -1,4 +1,4 @@
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 pub struct TimeoutRule;
@@ -137,5 +137,64 @@ impl Rule for NetworkImportRule {
             suggestion: Some("Mock network calls using vi.mock() or msw".to_string()),
             test_name: None,
         }]
+    }
+}
+
+pub struct FakeTimersCleanupRule;
+
+const TIMER_CLEANUP_CALLS: &[&str] = &[
+    "vi.restoreAllMocks",
+    "vi.useRealTimers",
+    "vi.restoreAllTimers",
+];
+
+impl Rule for FakeTimersCleanupRule {
+    fn id(&self) -> &'static str {
+        "VITEST-FLK-004"
+    }
+    fn name(&self) -> &'static str {
+        "FakeTimersCleanupRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Flakiness
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        // Check if any afterEach hook has timer cleanup
+        let has_cleanup = module.hook_calls.iter().any(|h| {
+            h.kind == HookKind::AfterEach
+                && h.vi_calls
+                    .iter()
+                    .any(|c| TIMER_CLEANUP_CALLS.iter().any(|tc| c == tc))
+        });
+
+        if has_cleanup {
+            return vec![];
+        }
+
+        module
+            .test_blocks
+            .iter()
+            .filter(|tb| tb.uses_fake_timers)
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "Test '{}' calls vi.useFakeTimers() without afterEach cleanup — timers will leak to other tests",
+                    tb.name
+                ),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Add afterEach(() => { vi.restoreAllMocks() }) or afterEach(() => { vi.useRealTimers() }) to reset timers".to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
     }
 }
