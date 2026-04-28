@@ -1,6 +1,8 @@
 use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
+/// Flags tests that contain no `expect()` assertions — they pass even if
+/// the code under test is broken.
 pub struct NoAssertionRule;
 
 impl Rule for NoAssertionRule {
@@ -40,6 +42,8 @@ impl Rule for NoAssertionRule {
     }
 }
 
+/// Flags tests with more than 5 `expect()` calls, suggesting they should
+/// be split into focused, single-behavior tests.
 pub struct MultipleExpectRule;
 
 impl Rule for MultipleExpectRule {
@@ -82,6 +86,8 @@ impl Rule for MultipleExpectRule {
     }
 }
 
+/// Flags tests that contain `if`/`switch` statements — tests should be
+/// deterministic without conditional branching.
 pub struct ConditionalLogicRule;
 
 impl Rule for ConditionalLogicRule {
@@ -122,6 +128,8 @@ impl Rule for ConditionalLogicRule {
     }
 }
 
+/// Flags tests that use `try/catch` — prefer `expect().toThrow()` or
+/// `expect().rejects` for error testing.
 pub struct TryCatchRule;
 
 impl Rule for TryCatchRule {
@@ -161,6 +169,8 @@ impl Rule for TryCatchRule {
     }
 }
 
+/// Flags skipped tests (`it.skip`, `test.todo`) that provide no value
+/// and should either be fixed or removed.
 pub struct EmptyTestRule;
 
 impl Rule for EmptyTestRule {
@@ -201,6 +211,8 @@ impl Rule for EmptyTestRule {
     }
 }
 
+/// Flags tests inside deeply nested `describe` blocks (deeper than 3 levels),
+/// which harms readability and should be flattened.
 pub struct NestedDescribeRule;
 
 impl Rule for NestedDescribeRule {
@@ -241,6 +253,8 @@ impl Rule for NestedDescribeRule {
     }
 }
 
+/// Flags tests that use `return` statements — tests should use assertions
+/// to verify behavior, not return values.
 pub struct ReturnInTestRule;
 
 impl Rule for ReturnInTestRule {
@@ -280,6 +294,8 @@ impl Rule for ReturnInTestRule {
     }
 }
 
+/// Flags tests with unawaited `.resolves` or `.rejects` assertions that
+/// will fail silently without `await`.
 pub struct MissingAwaitAssertionRule;
 
 impl Rule for MissingAwaitAssertionRule {
@@ -321,6 +337,8 @@ impl Rule for MissingAwaitAssertionRule {
     }
 }
 
+/// Flags focused tests (`it.only`, `test.only`, `describe.only`) that
+/// skip all other tests in the file — a common CI failure.
 pub struct FocusedTestRule;
 
 impl Rule for FocusedTestRule {
@@ -387,6 +405,8 @@ impl Rule for FocusedTestRule {
     }
 }
 
+/// Flags files using `vi.mock()` without `afterEach` cleanup, allowing
+/// mocks to leak between tests.
 pub struct MissingMockCleanupRule;
 
 const MOCK_CLEANUP_CALLS: &[&str] = &["vi.restoreAllMocks", "vi.clearAllMocks", "vi.resetAllMocks"];

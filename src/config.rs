@@ -40,12 +40,14 @@ struct RawBannedSingleton {
     names: Vec<String>,
 }
 
+/// Parsed configuration from `.vitest-linter.toml` and `package.json`.
 #[derive(Debug)]
 pub struct Config {
     pub deps: DepsConfig,
     pub rules: RulesConfig,
 }
 
+/// Per-rule severity overrides and enable/disable settings.
 #[derive(Debug, Default)]
 pub struct RulesConfig {
     /// Per-rule severity overrides. Key = rule ID, value = "off" | "info" | "warning" | "error"

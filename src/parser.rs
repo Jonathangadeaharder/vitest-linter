@@ -6,6 +6,8 @@ use crate::models::{
     DescribeBlock, HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
 };
 
+/// Tree-sitter-based TypeScript/TSX parser that extracts test metadata from
+/// Vitest test files.
 pub struct TsParser;
 
 #[derive(Default)]
@@ -19,11 +21,14 @@ struct Context {
 }
 
 impl TsParser {
+    /// Create a new parser instance.
     #[allow(clippy::missing_errors_doc)]
     pub const fn new() -> anyhow::Result<Self> {
         Ok(Self)
     }
 
+    /// Parse a single test file at `path` and return the extracted module
+    /// metadata (test blocks, imports, mocks, hooks, etc.).
     #[allow(clippy::missing_errors_doc)]
     pub fn parse_file(&self, path: &Path) -> anyhow::Result<ParsedModule> {
         let mut parser = Parser::new();

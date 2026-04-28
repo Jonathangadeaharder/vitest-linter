@@ -897,9 +897,9 @@ fn suppression_does_not_affect_other_rules() {
 import { test, expect } from 'vitest';
 
 // vitest-linter-disable-next-line VITEST-FLK-001
-test('has timeout', () => {
+test('has timeout but no assertions', () => {
     setTimeout(() => {
-        expect(1).toBe(1);
+        const x = 1;
     }, 1000);
 });
 "#,
@@ -910,7 +910,11 @@ test('has timeout', () => {
         find_violation(&violations, "VITEST-FLK-001").is_none(),
         "VITEST-FLK-001 should be suppressed"
     );
-    // Other rules should still fire (though this test case doesn't trigger others)
+    // MNT-001 (no assertions) should still fire
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_some(),
+        "VITEST-MNT-001 should fire even when FLK-001 is suppressed"
+    );
 }
 
 #[test]
@@ -945,7 +949,7 @@ fn flk004_fake_timers_with_after_each_cleanup() {
 import { test, expect, vi, afterEach } from 'vitest';
 
 afterEach(() => {
-    vi.restoreAllMocks();
+    vi.useRealTimers();
 });
 
 test('uses fake timers safely', () => {
@@ -958,7 +962,7 @@ test('uses fake timers safely', () => {
     let violations = engine.lint_paths(&[path]).unwrap();
     assert!(
         find_violation(&violations, "VITEST-FLK-004").is_none(),
-        "Should not trigger FLK-004 when afterEach has vi.restoreAllMocks()"
+        "Should not trigger FLK-004 when afterEach has vi.useRealTimers()"
     );
 }
 

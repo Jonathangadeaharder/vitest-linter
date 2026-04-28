@@ -1,16 +1,24 @@
 use crate::config::Config;
 use crate::models::{Category, ParsedModule, Severity, Violation};
 
+/// Context passed to each rule during evaluation, including the active
+/// configuration and all modules in the current group.
 pub struct LintContext<'a> {
     pub config: &'a Config,
     pub all_modules: &'a [ParsedModule],
 }
 
+/// Trait implemented by every lint rule.
 pub trait Rule {
+    /// Unique rule identifier (e.g. `VITEST-FLK-001`).
     fn id(&self) -> &'static str;
+    /// Human-readable rule name (e.g. `TimeoutRule`).
     fn name(&self) -> &'static str;
+    /// Default severity level for this rule.
     fn severity(&self) -> Severity;
+    /// Category this rule belongs to.
     fn category(&self) -> Category;
+    /// Evaluate the rule against a parsed module and return any violations.
     fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation>;
 }
 

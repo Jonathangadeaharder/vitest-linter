@@ -77,7 +77,7 @@ vitest-linter --incremental --base origin/main
 
 | Rule ID | Name | Severity | Description |
 |---------|------|----------|-------------|
-| VITEST-STR-001 | NestedDescribeRule | Warning | Test lives inside more than one level of `describe` nesting |
+| VITEST-STR-001 | NestedDescribeRule | Warning | Test lives inside more than 3 levels of `describe` nesting |
 | VITEST-STR-002 | ReturnInTestRule | Warning | `return` statement found inside a test body |
 
 ### Dependencies (VITEST-DEP-*)

@@ -5,6 +5,7 @@ use clap::Parser;
 
 use vitest_linter::run_cli;
 
+/// Command-line interface for `vitest-linter`.
 #[derive(Parser)]
 #[command(name = "vitest-linter")]
 #[command(about = "Detect test smells in Vitest/TypeScript test files")]

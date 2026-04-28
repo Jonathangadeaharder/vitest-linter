@@ -1,6 +1,8 @@
 use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
+/// Flags tests that use `setTimeout`/`setInterval` without fake timers,
+/// which can cause timing-dependent flakiness.
 pub struct TimeoutRule;
 
 impl Rule for TimeoutRule {
@@ -40,6 +42,8 @@ impl Rule for TimeoutRule {
     }
 }
 
+/// Flags tests that use `Date` or `Date.now()` without `vi.useFakeTimers()`,
+/// producing non-deterministic results across runs.
 pub struct DateMockRule;
 
 impl Rule for DateMockRule {
@@ -82,6 +86,8 @@ impl Rule for DateMockRule {
     }
 }
 
+/// Flags test files that import network libraries (axios, node-fetch, etc.)
+/// without mocking, making tests susceptible to network failures.
 pub struct NetworkImportRule;
 
 const NETWORK_LIBS: &[&str] = &[
@@ -140,13 +146,11 @@ impl Rule for NetworkImportRule {
     }
 }
 
+/// Flags tests that call `vi.useFakeTimers()` without a corresponding
+/// `afterEach` cleanup, causing timer state to leak between tests.
 pub struct FakeTimersCleanupRule;
 
-const TIMER_CLEANUP_CALLS: &[&str] = &[
-    "vi.restoreAllMocks",
-    "vi.useRealTimers",
-    "vi.restoreAllTimers",
-];
+const TIMER_CLEANUP_CALLS: &[&str] = &["vi.useRealTimers", "vi.clearAllTimers"];
 
 impl Rule for FakeTimersCleanupRule {
     fn id(&self) -> &'static str {
@@ -162,22 +166,20 @@ impl Rule for FakeTimersCleanupRule {
         Category::Flakiness
     }
     fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
-        // Check if any afterEach hook has timer cleanup
-        let has_cleanup = module.hook_calls.iter().any(|h| {
-            h.kind == HookKind::AfterEach
-                && h.vi_calls
-                    .iter()
-                    .any(|c| TIMER_CLEANUP_CALLS.iter().any(|tc| c == tc))
-        });
-
-        if has_cleanup {
-            return vec![];
-        }
-
         module
             .test_blocks
             .iter()
             .filter(|tb| tb.uses_fake_timers)
+            .filter(|_tb| {
+                // Check if any afterEach hook with timer cleanup covers this test.
+                // A cleanup hook typically appears before the tests it protects.
+                !module.hook_calls.iter().any(|h| {
+                    h.kind == HookKind::AfterEach
+                        && h.vi_calls
+                            .iter()
+                            .any(|c| TIMER_CLEANUP_CALLS.iter().any(|tc| c == tc))
+                })
+            })
             .map(|tb| Violation {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -191,7 +193,8 @@ impl Rule for FakeTimersCleanupRule {
                 line: tb.line,
                 col: None,
                 suggestion: Some(
-                    "Add afterEach(() => { vi.restoreAllMocks() }) or afterEach(() => { vi.useRealTimers() }) to reset timers".to_string(),
+                    "Add afterEach(() => { vi.useRealTimers() }) or afterEach(() => { vi.clearAllTimers() }) to reset timers"
+                        .to_string(),
                 ),
                 test_name: Some(tb.name.clone()),
             })
@@ -199,6 +202,8 @@ impl Rule for FakeTimersCleanupRule {
     }
 }
 
+/// Flags tests that use `Math.random()` or `crypto.randomUUID()` without
+/// seeding, producing non-deterministic results.
 pub struct NonDeterministicRule;
 
 impl Rule for NonDeterministicRule {

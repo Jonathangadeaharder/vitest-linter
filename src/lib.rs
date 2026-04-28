@@ -44,6 +44,8 @@ fn get_changed_files(base: &str) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Run the CLI with the given arguments and return whether error-severity
+/// violations were found.
 #[allow(clippy::missing_errors_doc)]
 pub fn run_cli(
     paths: &[PathBuf],

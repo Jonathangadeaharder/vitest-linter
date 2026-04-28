@@ -13,6 +13,7 @@ const platformMap = {
   'linux-x64': 'vitest-linter-linux-x86_64',
   'linux-arm64': 'vitest-linter-linux-arm64',
   'win32-x64': 'vitest-linter-win32-x86_64',
+  'win32-arm64': 'vitest-linter-win32-arm64',
 };
 
 const key = `${platform}-${arch}`;
@@ -27,6 +28,9 @@ try {
   const binPath = require.resolve(`${pkg}/vitest-linter${platform === 'win32' ? '.exe' : ''}`);
   execFileSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
 } catch (err) {
+  if (typeof err.status === 'number') {
+    process.exit(err.status);
+  }
   console.error(`Failed to run vitest-linter for ${key}: ${err.message}`);
   console.error(`Install the platform package: npm install ${pkg}`);
   process.exit(1);

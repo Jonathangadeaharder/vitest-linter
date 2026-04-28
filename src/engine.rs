@@ -10,11 +10,14 @@ use crate::parser::TsParser;
 use crate::rules::{all_rules, LintContext};
 use crate::suppression::SuppressionMap;
 
+/// Top-level linting engine that coordinates file discovery, parsing, rule
+/// evaluation, and suppression filtering.
 pub struct LintEngine {
     parser: TsParser,
 }
 
 impl LintEngine {
+    /// Create a new engine backed by a tree-sitter TypeScript parser.
     #[allow(clippy::missing_errors_doc)]
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
@@ -22,6 +25,11 @@ impl LintEngine {
         })
     }
 
+    /// Lint all test files discovered under `paths` and return sorted violations.
+    ///
+    /// Files are parsed in parallel via rayon, grouped by their nearest
+    /// `.vitest-linter.toml` config root, and evaluated against the active
+    /// rule set. Suppression comments are respected.
     #[allow(clippy::missing_errors_doc)]
     pub fn lint_paths(&self, paths: &[PathBuf]) -> anyhow::Result<Vec<Violation>> {
         let files = Self::discover_files(paths);
@@ -58,6 +66,10 @@ impl LintEngine {
         let rules = all_rules();
         let mut violations = Vec::new();
 
+        // Pre-parse suppression maps once per file (not per rule)
+        let suppressions: Vec<SuppressionMap> =
+            sources.iter().map(|s| SuppressionMap::parse(s)).collect();
+
         for (config, indices) in groups.values() {
             let group_modules: Vec<ParsedModule> =
                 indices.iter().map(|i| modules[*i].clone()).collect();
@@ -85,7 +97,7 @@ impl LintEngine {
                         }
                     }
                     // Filter suppressed violations
-                    let suppression = SuppressionMap::parse(&sources[global_idx]);
+                    let suppression = &suppressions[global_idx];
                     v.retain(|violation| {
                         !suppression.is_suppressed(violation.line, &violation.rule_id)
                     });

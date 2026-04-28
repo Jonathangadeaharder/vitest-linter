@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+/// Severity level for a lint violation, ordered Error > Warning > Info.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Severity {
     Error,
@@ -9,6 +10,7 @@ pub enum Severity {
     Info,
 }
 
+/// Category grouping for lint rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Category {
     Flakiness,
@@ -17,6 +19,7 @@ pub enum Category {
     Dependencies,
 }
 
+/// A single lint violation found by a rule.
 #[derive(Debug, Clone, Serialize)]
 pub struct Violation {
     pub rule_id: String,
