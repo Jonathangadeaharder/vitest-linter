@@ -25,6 +25,7 @@ pub trait Rule {
 pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
+pub mod validation;
 
 #[must_use]
 pub fn all_rules() -> Vec<Box<dyn Rule>> {
@@ -47,6 +48,11 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
+        Box::new(validation::ValidExpectRule),
+        Box::new(validation::ValidExpectInPromiseRule),
+        Box::new(validation::ValidDescribeCallbackRule),
+        Box::new(validation::ValidTitleRule),
+        Box::new(validation::NoUnneededAsyncExpectFunctionRule),
     ]
 }
 
@@ -57,7 +63,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 18);
+        assert_eq!(rules.len(), 23);
     }
 
     #[test]
@@ -82,6 +88,11 @@ mod tests {
             "VITEST-DEP-001",
             "VITEST-DEP-002",
             "VITEST-DEP-003",
+            "VITEST-VAL-001",
+            "VITEST-VAL-002",
+            "VITEST-VAL-003",
+            "VITEST-VAL-004",
+            "VITEST-VAL-005",
         ];
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         for id in &expected {
@@ -118,10 +129,15 @@ mod tests {
             .iter()
             .filter(|r| r.category() == Category::Dependencies)
             .collect();
+        let val: Vec<_> = rules
+            .iter()
+            .filter(|r| r.category() == Category::Validation)
+            .collect();
         assert_eq!(flk.len(), 5);
         assert_eq!(mnt.len(), 8);
         assert_eq!(str_.len(), 2);
         assert_eq!(dep.len(), 3);
+        assert_eq!(val.len(), 5);
     }
 
     #[test]
@@ -146,6 +162,11 @@ mod tests {
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),
+            ("VITEST-VAL-001", "ValidExpectRule"),
+            ("VITEST-VAL-002", "ValidExpectInPromiseRule"),
+            ("VITEST-VAL-003", "ValidDescribeCallbackRule"),
+            ("VITEST-VAL-004", "ValidTitleRule"),
+            ("VITEST-VAL-005", "NoUnneededAsyncExpectFunctionRule"),
         ];
         for (id, name) in &expected {
             let rule = rules.iter().find(|r| r.id() == *id).unwrap();

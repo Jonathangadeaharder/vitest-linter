@@ -17,6 +17,7 @@ pub enum Category {
     Maintenance,
     Structure,
     Dependencies,
+    Validation,
 }
 
 /// A single lint violation found by a rule.
@@ -79,6 +80,10 @@ pub struct TestBlock {
     pub unawaited_async_assertions: usize,
     pub uses_fake_timers: bool,
     pub uses_random: bool,
+    pub has_expect_call_without_assertion: bool,
+    pub has_return_of_expect: bool,
+    pub title_is_template_literal: bool,
+    pub has_async_expect_wrapper: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +93,9 @@ pub struct DescribeBlock {
     pub line: usize,
     pub is_only: bool,
     pub depth: usize,
+    pub title_is_template_literal: bool,
+    pub title_is_empty: bool,
+    pub is_async: bool,
 }
 
 #[derive(Debug, Clone)]

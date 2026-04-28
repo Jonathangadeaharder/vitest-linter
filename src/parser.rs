@@ -146,12 +146,28 @@ impl TsParser {
                 let name = name_node
                     .and_then(|n| Self::string_value(n, source))
                     .unwrap_or_default();
+                let title_is_template_literal =
+                    name_node.map_or(false, |n| n.kind() == "template_string");
+                let title_is_empty = name.is_empty();
+
+                // Check if describe callback is async.
+                let is_async = node
+                    .child_by_field_name("arguments")
+                    .and_then(|args| args.named_child(1))
+                    .map_or(false, |cb| {
+                        let text = cb.utf8_text(source.as_bytes()).unwrap_or("");
+                        text.starts_with("async")
+                    });
+
                 ctx.describe_blocks.push(DescribeBlock {
                     name,
                     file_path: path.to_path_buf(),
                     line: node.start_position().row + 1,
                     is_only,
                     depth: describe_depth,
+                    title_is_template_literal,
+                    title_is_empty,
+                    is_async,
                 });
 
                 if let Some(body) = Self::callback_body(node) {
@@ -395,6 +411,10 @@ impl TsParser {
 
         let st = body.map_or_else(Analysis::default, |b| Self::analyze(b, source));
 
+        let title_is_template_literal = args
+            .named_child(0)
+            .map_or(false, |n| n.kind() == "template_string");
+
         Some(TestBlock {
             name,
             file_path: path.to_path_buf(),
@@ -413,6 +433,10 @@ impl TsParser {
             unawaited_async_assertions: st.unawaited_async_assertions,
             uses_fake_timers: st.uses_fake_timers,
             uses_random: st.uses_random,
+            has_expect_call_without_assertion: st.has_expect_call_without_assertion,
+            has_return_of_expect: st.has_return_of_expect,
+            title_is_template_literal,
+            has_async_expect_wrapper: st.has_async_expect_wrapper,
         })
     }
 
@@ -470,13 +494,43 @@ impl TsParser {
             "call_expression" => {
                 let func = node.child_by_field_name("function").unwrap();
                 let text = func.utf8_text(source.as_bytes()).unwrap_or("");
-                if text.starts_with("expect") {
+                // Only count expect() calls where the function is a simple identifier
+                // (not a chained member expression like expect(x).toBe).
+                let is_expect_call = func.kind() == "identifier" && text == "expect";
+                if is_expect_call {
                     st.assertion_count += 1;
-                    if (text.contains(".resolves") || text.contains(".rejects"))
-                        && !Self::is_awaited(node)
-                    {
-                        st.unawaited_async_assertions += 1;
+                    // Check if expect() is called without a chained assertion method.
+                    // If the expect call is inside a member_expression that is itself
+                    // inside a call_expression, it has a chained assertion (e.g. expect(x).toBe(y)).
+                    let has_chained_assertion = Self::has_parent_member_call(node);
+                    if !has_chained_assertion {
+                        st.has_expect_call_without_assertion = true;
                     }
+                    // Check if expect() wraps an async function.
+                    if let Some(args) = node.child_by_field_name("arguments") {
+                        if let Some(first_arg) = args.named_child(0) {
+                            if first_arg.kind() == "arrow_function"
+                                || first_arg.kind() == "function_expression"
+                            {
+                                let func_text =
+                                    first_arg.utf8_text(source.as_bytes()).unwrap_or("");
+                                if func_text.starts_with("async") {
+                                    st.has_async_expect_wrapper = true;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // For non-expect calls, walk the function field to find nested expect calls
+                    // (e.g., expect(x).toBe(y) or expect(async () => ...).not.toThrow()).
+                    Self::walk_body(func, source, st);
+                }
+                // Check for unawaited async assertions (.resolves/.rejects).
+                // This applies to any call that contains these in its text.
+                if (text.contains(".resolves") || text.contains(".rejects"))
+                    && !Self::is_awaited(node)
+                {
+                    st.unawaited_async_assertions += 1;
                 }
                 if text == "setTimeout" {
                     st.uses_settimeout = true;
@@ -490,6 +544,7 @@ impl TsParser {
                 if text == "Math.random" || text == "crypto.randomUUID" {
                     st.uses_random = true;
                 }
+                // Walk arguments to find nested expect calls.
                 let args = node.child_by_field_name("arguments").unwrap();
                 for i in 0..args.named_child_count() {
                     let child = args.named_child(i).unwrap();
@@ -511,6 +566,14 @@ impl TsParser {
             }
             "return_statement" => {
                 st.has_return = true;
+                // Check if return contains an expect call.
+                for i in 0..node.named_child_count() {
+                    let child = node.named_child(i).unwrap();
+                    if Self::contains_expect_call(child, source) {
+                        st.has_return_of_expect = true;
+                        break;
+                    }
+                }
             }
             _ => {}
         }
@@ -519,6 +582,46 @@ impl TsParser {
             let child = node.named_child(i).unwrap();
             Self::walk_body(child, source, st);
         }
+    }
+
+    /// Check if a node is an expect() call inside a member expression chain
+    /// (e.g., expect(x).toBe(y) — the expect call has a parent member_expression
+    /// which is inside another call_expression).
+    fn has_parent_member_call(node: Node) -> bool {
+        let mut curr = node;
+        while let Some(parent) = curr.parent() {
+            if parent.kind() == "member_expression" {
+                // Check if this member_expression is the function of a call_expression.
+                if let Some(grandparent) = parent.parent() {
+                    if grandparent.kind() == "call_expression" {
+                        return true;
+                    }
+                }
+            }
+            curr = parent;
+        }
+        false
+    }
+
+    /// Check if a subtree contains an expect() call.
+    fn contains_expect_call(node: Node, source: &str) -> bool {
+        if node.kind() == "call_expression" {
+            if let Some(func) = node.child_by_field_name("function") {
+                if func.kind() == "identifier" {
+                    let text = func.utf8_text(source.as_bytes()).unwrap_or("");
+                    if text == "expect" {
+                        return true;
+                    }
+                }
+            }
+        }
+        for i in 0..node.named_child_count() {
+            let child = node.named_child(i).unwrap();
+            if Self::contains_expect_call(child, source) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -534,6 +637,9 @@ struct Analysis {
     unawaited_async_assertions: usize,
     uses_fake_timers: bool,
     uses_random: bool,
+    has_expect_call_without_assertion: bool,
+    has_return_of_expect: bool,
+    has_async_expect_wrapper: bool,
 }
 
 #[cfg(test)]
