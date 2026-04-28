@@ -1,8 +1,10 @@
 //! Criterion benchmark: lint a synthetic large corpus.
 //!
-//! The fixture is generated in-process: 1 000 test files × ~100 lines each,
-//! approximating a 100 K-line TypeScript test suite.  All files are written to
-//! a temporary directory so the benchmark is self-contained and reproducible.
+//! The fixture is generated in-process from the benchmark configuration: a set
+//! of `.test.ts` files whose count varies by benchmark, with each file's
+//! length scaling with the configured number of generated test blocks. All
+//! files are written to a temporary directory so the benchmark is
+//! self-contained and reproducible.
 
 use std::path::PathBuf;
 
@@ -87,10 +89,10 @@ fn write_corpus(dir: &TempDir, n_files: usize, tests_per_file: usize) -> Vec<Pat
 fn bench_lint_corpus(c: &mut Criterion) {
     // Configurations: (files, tests_per_file) → total ~lines = files × tests_per_file × ~8
     let configs: &[(usize, usize)] = &[
-        (10, 10),   //    ~800 lines  – warm-up
-        (100, 10),  //   ~8 000 lines
-        (200, 50),  //  ~80 000 lines – approaches 100 K
-        (250, 50),  // ~100 000 lines – target
+        (10, 10),  //    ~800 lines  – warm-up
+        (100, 10), //   ~8 000 lines
+        (200, 50), //  ~80 000 lines – approaches 100 K
+        (250, 50), // ~100 000 lines – target
     ];
 
     let mut group = c.benchmark_group("lint_large_corpus");
@@ -100,10 +102,13 @@ fn bench_lint_corpus(c: &mut Criterion) {
         group.throughput(Throughput::Elements(approx_lines as u64));
 
         group.bench_with_input(
-            BenchmarkId::new("files", n_files),
+            BenchmarkId::new(
+                "files",
+                format!("{n_files}_files_{tests_per_file}_tests_per_file"),
+            ),
             &(n_files, tests_per_file),
             |b, &(nf, tp)| {
-                // Setup: write files once per benchmark sample.
+                // Setup: write files once before benchmark iterations.
                 let dir = TempDir::new().expect("tmpdir");
                 let paths = write_corpus(&dir, nf, tp);
                 let engine = LintEngine::new().expect("engine");

@@ -81,6 +81,7 @@ impl LintEngine {
 }
 
 fn is_test_file(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
     name.ends_with(".test.ts")
         || name.ends_with(".spec.ts")
         || name.ends_with(".test.tsx")

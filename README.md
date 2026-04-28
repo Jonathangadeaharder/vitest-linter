@@ -5,10 +5,9 @@ A fast, zero-config test-smell linter for TypeScript/JavaScript Vitest test suit
 ## Features
 
 - **11 rules** across 3 categories: Flakiness, Maintenance, Structure
-- Parallel file walking via [walkdir](https://docs.rs/walkdir)
+- Recursive file discovery via [walkdir](https://docs.rs/walkdir)
 - Tree-sitter-powered AST analysis (TypeScript **and** TSX/JSX)
 - JSON and terminal output formats
-- Inline suppression comments
 - Exit code 1 on `Error`-severity violations (CI-friendly)
 
 ## Installation
