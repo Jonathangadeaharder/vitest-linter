@@ -16,7 +16,7 @@ impl Rule for TimeoutRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -55,7 +55,7 @@ impl Rule for DateMockRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         if module.has_fake_timers {
             return vec![];
         }
@@ -107,7 +107,7 @@ impl Rule for NetworkImportRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         let mut found = false;
         for imp in &module.imports {
             for lib in NETWORK_LIBS {

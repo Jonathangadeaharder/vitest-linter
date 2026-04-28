@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use walkdir::WalkDir;
 
+use crate::config::Config;
 use crate::models::Violation;
 use crate::parser::TsParser;
-use crate::rules::all_rules;
+use crate::rules::{all_rules, LintContext};
 
 pub struct LintEngine {
     parser: TsParser,
@@ -30,12 +31,24 @@ impl LintEngine {
             }
         }
 
+        // Load config from the first input path (walks up to find
+        // .vitest-linter.toml). Empty paths or no config falls back to defaults.
+        let config = paths
+            .first()
+            .map(|p| Config::load_from(p))
+            .transpose()?
+            .unwrap_or_default();
+
         let rules = all_rules();
         let mut violations = Vec::new();
+        let ctx = LintContext {
+            config: &config,
+            all_modules: &modules,
+        };
 
         for rule in &rules {
             for module in &modules {
-                let mut v = rule.check(module, &modules);
+                let mut v = rule.check(module, &ctx);
                 violations.append(&mut v);
             }
         }

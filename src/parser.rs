@@ -2,9 +2,20 @@ use std::path::Path;
 
 use tree_sitter::{Node, Parser};
 
-use crate::models::{ParsedModule, TestBlock};
+use crate::models::{
+    HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
+};
 
 pub struct TsParser;
+
+#[derive(Default)]
+struct Context {
+    imports: Vec<String>,
+    imports_parsed: Vec<ImportEntry>,
+    vi_mocks: Vec<ViMockCall>,
+    hook_calls: Vec<HookCall>,
+    test_blocks: Vec<TestBlock>,
+}
 
 impl TsParser {
     #[allow(clippy::missing_errors_doc)]
@@ -33,17 +44,19 @@ impl TsParser {
             .ok_or_else(|| anyhow::anyhow!("Failed to parse file: {}", path.display()))?;
 
         let root = tree.root_node();
-        let mut imports = Vec::new();
-        let mut test_blocks = Vec::new();
+        let mut ctx = Context::default();
 
-        Self::collect(root, &source, path, 0, &mut imports, &mut test_blocks);
+        Self::collect(root, &source, path, 0, MockScope::Module, &mut ctx);
 
         let has_fake_timers = source.contains("useFakeTimers");
 
         Ok(ParsedModule {
             file_path: path.to_path_buf(),
-            imports,
-            test_blocks,
+            imports: ctx.imports,
+            imports_parsed: ctx.imports_parsed,
+            vi_mocks: ctx.vi_mocks,
+            hook_calls: ctx.hook_calls,
+            test_blocks: ctx.test_blocks,
             has_fake_timers,
         })
     }
@@ -53,8 +66,8 @@ impl TsParser {
         source: &str,
         path: &Path,
         describe_depth: usize,
-        imports: &mut Vec<String>,
-        test_blocks: &mut Vec<TestBlock>,
+        scope: MockScope,
+        ctx: &mut Context,
     ) {
         for i in 0..node.named_child_count() {
             let Some(child) = node.named_child(i) else {
@@ -63,13 +76,16 @@ impl TsParser {
             match child.kind() {
                 "import_statement" => {
                     let text = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                    imports.push(text);
+                    ctx.imports.push(text);
+                    if let Some(entry) = Self::parse_import(child, source) {
+                        ctx.imports_parsed.push(entry);
+                    }
                 }
                 "call_expression" => {
-                    Self::handle_call(child, source, path, describe_depth, imports, test_blocks);
+                    Self::handle_call(child, source, path, describe_depth, scope, ctx);
                 }
                 _ => {
-                    Self::collect(child, source, path, describe_depth, imports, test_blocks);
+                    Self::collect(child, source, path, describe_depth, scope, ctx);
                 }
             }
         }
@@ -80,31 +96,191 @@ impl TsParser {
         source: &str,
         path: &Path,
         describe_depth: usize,
-        imports: &mut Vec<String>,
-        test_blocks: &mut Vec<TestBlock>,
+        scope: MockScope,
+        ctx: &mut Context,
     ) {
         let Some(func_node) = node.child_by_field_name("function") else {
-            Self::collect(node, source, path, describe_depth, imports, test_blocks);
+            Self::collect(node, source, path, describe_depth, scope, ctx);
             return;
         };
 
         let (func_name, is_skip) = Self::parse_callee(func_node, source);
+        let full_callee = func_node
+            .utf8_text(source.as_bytes())
+            .unwrap_or("")
+            .to_string();
+
+        // vi.mock(...) — module-scope hoisted mock when at module scope, but we
+        // record it with the actual lexical scope so rules can decide.
+        if full_callee == "vi.mock" {
+            if let Some(entry) = Self::extract_vi_mock(node, source, scope) {
+                ctx.vi_mocks.push(entry);
+            }
+        }
 
         match func_name.as_str() {
             "test" | "it" => {
                 if let Some(tb) = Self::extract_test(node, source, path, describe_depth, is_skip) {
-                    test_blocks.push(tb);
+                    ctx.test_blocks.push(tb);
+                }
+                // Recurse into body with Test scope so nested vi.* calls
+                // (rare, and a smell themselves) get tagged correctly.
+                if let Some(body) = Self::callback_body(node) {
+                    Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
                 }
             }
             "describe" => {
                 if let Some(body) = Self::callback_body(node) {
-                    Self::collect(body, source, path, describe_depth + 1, imports, test_blocks);
+                    Self::collect(body, source, path, describe_depth + 1, scope, ctx);
                 } else {
-                    Self::collect(node, source, path, describe_depth, imports, test_blocks);
+                    Self::collect(node, source, path, describe_depth, scope, ctx);
                 }
             }
+            "beforeEach" | "afterEach" | "beforeAll" | "afterAll" => {
+                let kind = match func_name.as_str() {
+                    "beforeEach" => HookKind::BeforeEach,
+                    "afterEach" => HookKind::AfterEach,
+                    "beforeAll" => HookKind::BeforeAll,
+                    "afterAll" => HookKind::AfterAll,
+                    _ => unreachable!(),
+                };
+                let mut vi_calls = Vec::new();
+                if let Some(body) = Self::single_callback_body(node) {
+                    Self::collect_vi_calls(body, source, &mut vi_calls);
+                    Self::collect(body, source, path, describe_depth, MockScope::Hook, ctx);
+                }
+                ctx.hook_calls.push(HookCall {
+                    kind,
+                    line: node.start_position().row + 1,
+                    vi_calls,
+                });
+            }
             _ => {
-                Self::collect(node, source, path, describe_depth, imports, test_blocks);
+                Self::collect(node, source, path, describe_depth, scope, ctx);
+            }
+        }
+    }
+
+    fn collect_vi_calls(node: Node, source: &str, out: &mut Vec<String>) {
+        if node.kind() == "call_expression" {
+            if let Some(func) = node.child_by_field_name("function") {
+                let text = func.utf8_text(source.as_bytes()).unwrap_or("");
+                if text.starts_with("vi.") {
+                    out.push(text.to_string());
+                }
+            }
+        }
+        for i in 0..node.named_child_count() {
+            if let Some(child) = node.named_child(i) {
+                Self::collect_vi_calls(child, source, out);
+            }
+        }
+    }
+
+    fn extract_vi_mock(node: Node, source: &str, scope: MockScope) -> Option<ViMockCall> {
+        let args = node.child_by_field_name("arguments")?;
+        if args.named_child_count() == 0 {
+            return None;
+        }
+        let first = args.named_child(0)?;
+        let src = Self::string_value(first, source)?;
+        Some(ViMockCall {
+            source: src,
+            line: node.start_position().row + 1,
+            scope,
+        })
+    }
+
+    fn parse_import(node: Node, source: &str) -> Option<ImportEntry> {
+        // tree-sitter-typescript: import_statement has a `source` field
+        // (string literal). The clause is one of: identifier, namespace_import,
+        // named_imports — we walk the named children to find them.
+        let mut entry = ImportEntry {
+            source: String::new(),
+            named: Vec::new(),
+            default: None,
+            namespace: None,
+            line: node.start_position().row + 1,
+        };
+
+        for i in 0..node.named_child_count() {
+            let child = node.named_child(i)?;
+            match child.kind() {
+                "string" => {
+                    let raw = child.utf8_text(source.as_bytes()).unwrap_or("");
+                    entry.source = raw
+                        .trim_matches(|c: char| c == '"' || c == '\'' || c == '`')
+                        .to_string();
+                }
+                "import_clause" => {
+                    Self::walk_import_clause(child, source, &mut entry);
+                }
+                _ => {}
+            }
+        }
+
+        if entry.source.is_empty() {
+            return None;
+        }
+        Some(entry)
+    }
+
+    fn walk_import_clause(node: Node, source: &str, entry: &mut ImportEntry) {
+        for i in 0..node.named_child_count() {
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            match child.kind() {
+                "identifier" => {
+                    let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                    if !name.is_empty() {
+                        entry.default = Some(name);
+                    }
+                }
+                "namespace_import" => {
+                    for j in 0..child.named_child_count() {
+                        if let Some(inner) = child.named_child(j) {
+                            if inner.kind() == "identifier" {
+                                entry.namespace = Some(
+                                    inner.utf8_text(source.as_bytes()).unwrap_or("").to_string(),
+                                );
+                            }
+                        }
+                    }
+                }
+                "named_imports" => {
+                    for j in 0..child.named_child_count() {
+                        if let Some(spec) = child.named_child(j) {
+                            if spec.kind() == "import_specifier" {
+                                // import_specifier has `name` and optional `alias`.
+                                let name = spec
+                                    .child_by_field_name("name")
+                                    .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                                    .unwrap_or("");
+                                if !name.is_empty() {
+                                    entry.named.push(name.to_string());
+                                } else {
+                                    // Fallback: first identifier child.
+                                    for k in 0..spec.named_child_count() {
+                                        if let Some(c) = spec.named_child(k) {
+                                            if c.kind() == "identifier" {
+                                                let n = c
+                                                    .utf8_text(source.as_bytes())
+                                                    .unwrap_or("")
+                                                    .to_string();
+                                                if !n.is_empty() {
+                                                    entry.named.push(n);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -131,6 +307,15 @@ impl TsParser {
             return None;
         }
         let callback = args.named_child(1)?;
+        Self::func_body(callback)
+    }
+
+    fn single_callback_body(call_node: Node) -> Option<Node> {
+        let args = call_node.child_by_field_name("arguments")?;
+        if args.named_child_count() == 0 {
+            return None;
+        }
+        let callback = args.named_child(0)?;
         Self::func_body(callback)
     }
 
@@ -601,5 +786,106 @@ describe('outer', () => {
             "test inside nested describe should be is_nested"
         );
         assert!(module.test_blocks[0].has_assertions);
+    }
+
+    #[test]
+    fn parse_vi_mock_module_scope() {
+        let dir = write_temp(
+            r#"
+import { vi } from 'vitest';
+
+vi.mock('../infrastructure/database', () => ({ db: {} }));
+"#,
+            "mock.test.ts",
+        );
+        let path = dir.path().join("mock.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.vi_mocks.len(), 1);
+        assert_eq!(module.vi_mocks[0].source, "../infrastructure/database");
+        assert_eq!(module.vi_mocks[0].scope, MockScope::Module);
+    }
+
+    #[test]
+    fn parse_imports_structured_named_default_namespace() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from 'vitest';
+import axios from 'axios';
+import * as fs from 'fs';
+import { progressPersistence } from './progress-persistence';
+"#,
+            "structured.test.ts",
+        );
+        let path = dir.path().join("structured.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        let vitest = module
+            .imports_parsed
+            .iter()
+            .find(|e| e.source == "vitest")
+            .unwrap();
+        assert!(vitest.named.contains(&"test".to_string()));
+        assert!(vitest.named.contains(&"expect".to_string()));
+
+        let axios = module
+            .imports_parsed
+            .iter()
+            .find(|e| e.source == "axios")
+            .unwrap();
+        assert_eq!(axios.default.as_deref(), Some("axios"));
+
+        let fs_imp = module
+            .imports_parsed
+            .iter()
+            .find(|e| e.source == "fs")
+            .unwrap();
+        assert_eq!(fs_imp.namespace.as_deref(), Some("fs"));
+
+        let pp = module
+            .imports_parsed
+            .iter()
+            .find(|e| e.source == "./progress-persistence")
+            .unwrap();
+        assert!(pp.named.contains(&"progressPersistence".to_string()));
+    }
+
+    #[test]
+    fn parse_hook_calls_capture_vi_methods() {
+        let dir = write_temp(
+            r#"
+import { beforeEach, afterEach, vi } from 'vitest';
+
+beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+});
+
+afterEach(() => {
+    vi.clearAllMocks();
+});
+"#,
+            "hooks.test.ts",
+        );
+        let path = dir.path().join("hooks.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.hook_calls.len(), 2);
+        let before = module
+            .hook_calls
+            .iter()
+            .find(|h| h.kind == HookKind::BeforeEach)
+            .unwrap();
+        assert!(before.vi_calls.iter().any(|c| c == "vi.resetModules"));
+        assert!(before.vi_calls.iter().any(|c| c == "vi.restoreAllMocks"));
+        let after = module
+            .hook_calls
+            .iter()
+            .find(|h| h.kind == HookKind::AfterEach)
+            .unwrap();
+        assert!(after.vi_calls.iter().any(|c| c == "vi.clearAllMocks"));
     }
 }

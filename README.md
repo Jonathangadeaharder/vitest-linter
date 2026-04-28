@@ -4,7 +4,8 @@ A fast, zero-config test-smell linter for TypeScript/JavaScript Vitest test suit
 
 ## Features
 
-- **11 rules** across 3 categories: Flakiness, Maintenance, Structure
+- **14 rules** across 4 categories: Flakiness, Maintenance, Structure, Dependencies
+- Optional `.vitest-linter.toml` for project-specific banlists (DI rules)
 - Recursive file discovery via [walkdir](https://docs.rs/walkdir)
 - Tree-sitter-powered AST analysis (TypeScript **and** TSX/JSX)
 - JSON and terminal output formats
@@ -39,7 +40,7 @@ vitest-linter --no-color
 
 ## Rules
 
-> **11 rules** implemented across 3 categories.  Numeric suffixes are kept in
+> **14 rules** implemented across 4 categories.  Numeric suffixes are kept in
 > parity with pytest-linter where a 1:1 semantic mapping exists.
 
 ### Flakiness (VITEST-FLK-*)
@@ -67,6 +68,50 @@ vitest-linter --no-color
 |---------|------|----------|-------------|
 | VITEST-STR-001 | NestedDescribeRule | Warning | Test lives inside more than one level of `describe` nesting |
 | VITEST-STR-002 | ReturnInTestRule | Warning | `return` statement found inside a test body |
+
+### Dependencies (VITEST-DEP-*)
+
+Catch test-isolation bugs that arise from module-level mocking of singleton
+infrastructure. Active only when `.vitest-linter.toml` configures a banlist.
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-DEP-001 | BannedModuleMockRule | Error | `vi.mock(<path>)` at module scope where path matches a configured banlist (e.g. shared `db`/`eventBus`/`container`). Such mocks leak across test files via the module cache and silently corrupt downstream tests. Refactor the target service to accept dependencies via constructor (DI). |
+| VITEST-DEP-002 | ProductionSingletonImportRule | Error | Unit test imports a configured production singleton. Importing the singleton triggers its constructor side effects (event-handler registration, DB connections) on the production wiring. Construct a fresh instance with fakes; production singletons belong in `*.integration.test.ts` only. |
+| VITEST-DEP-003 | ResetEscapeHatchRule | Warning | `vi.resetModules()` / `vi.restoreAllMocks()` / `vi.unmock()` inside `beforeEach`/`beforeAll`/`afterEach`/`afterAll`. These mask underlying coupling between test files instead of fixing it. |
+
+## Configuration (`.vitest-linter.toml`)
+
+Place a `.vitest-linter.toml` next to your `package.json`. The linter walks up
+from the input path to find it.
+
+```toml
+[deps]
+# Paths whose module-level vi.mock(...) is forbidden. Globbed against the
+# string passed to vi.mock(...). Leading "./" and "../" are stripped before
+# matching, so "**/infrastructure/database" matches "../infrastructure/database".
+banned_mock_paths = [
+  "**/infrastructure/database",
+  "**/infrastructure/event-bus",
+  "**/infrastructure/container",
+]
+
+# Override default integration-test glob (used by DEP-002 to skip files where
+# importing real singletons is the contract under test).
+integration_test_glob = "**/*.integration.test.{ts,tsx,js,jsx}"
+
+# Production singletons that must not be imported in unit tests.
+[[deps.banned_singletons]]
+from  = "**/services/pipeline-orchestrator"
+names = ["orchestrator"]
+
+[[deps.banned_singletons]]
+from  = "**/services/progress-persistence"
+names = ["progressPersistence"]
+```
+
+If no config file exists, DEP-001 and DEP-002 are inactive (no banlist → no
+violations); DEP-003 still runs with its built-in defaults.
 
 ## Supported File Extensions
 
