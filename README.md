@@ -68,15 +68,6 @@ vitest-linter --no-color
 | VITEST-STR-001 | NestedDescribeRule | Warning | Test lives inside more than one level of `describe` nesting |
 | VITEST-STR-002 | ReturnInTestRule | Warning | `return` statement found inside a test body |
 
-## Suppression
-
-Suppress a single violation on the next line:
-
-```typescript
-// vitest-linter-disable-next-line VITEST-FLK-001
-setTimeout(() => {}, 0);
-```
-
 ## Supported File Extensions
 
 `.test.ts`, `.spec.ts`, `.test.tsx`, `.spec.tsx`, `.test.js`, `.spec.js`, `.test.jsx`, `.spec.jsx`

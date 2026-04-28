@@ -109,6 +109,10 @@ mod tests {
         assert!(is_test_file("path/to/bar.test.ts"));
         assert!(is_test_file("path/to/bar.spec.js"));
         assert!(is_test_file("path/to/baz.test.tsx"));
+        // Case-insensitive matching
+        assert!(is_test_file("Foo.TEST.ts"));
+        assert!(is_test_file("path/To/BaZ.Spec.JS"));
+        assert!(is_test_file("UPPER.TEST.TSX"));
     }
 
     #[test]
