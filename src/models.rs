@@ -17,6 +17,7 @@ pub enum Category {
     Maintenance,
     Structure,
     Dependencies,
+    Validation,
 }
 
 /// A single lint violation found by a rule.
@@ -79,15 +80,26 @@ pub struct TestBlock {
     pub unawaited_async_assertions: usize,
     pub uses_fake_timers: bool,
     pub uses_random: bool,
+    pub has_expect_call_without_assertion: bool,
+    pub has_return_of_expect: bool,
+    pub title_is_template_literal: bool,
+    pub has_async_expect_wrapper: bool,
+    pub uses_fit_or_xit: bool,
+    pub has_done_callback: bool,
+    pub has_conditional_expect: bool,
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DescribeBlock {
     pub name: String,
     pub file_path: PathBuf,
     pub line: usize,
     pub is_only: bool,
     pub depth: usize,
+    pub title_is_template_literal: bool,
+    pub title_is_empty: bool,
+    pub is_async: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +112,20 @@ pub struct ParsedModule {
     pub test_blocks: Vec<TestBlock>,
     pub describe_blocks: Vec<DescribeBlock>,
     pub has_fake_timers: bool,
+    pub expects_outside_tests: Vec<ExpectOutsideTest>,
+    pub imports_node_test: bool,
+    pub snapshot_sizes: Vec<SnapshotSize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExpectOutsideTest {
+    pub line: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotSize {
+    pub line: usize,
+    pub size: usize,
 }
 
 #[derive(Debug, Clone)]

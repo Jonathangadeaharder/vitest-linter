@@ -3,7 +3,8 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 use crate::models::{
-    DescribeBlock, HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
+    DescribeBlock, ExpectOutsideTest, HookCall, HookKind, ImportEntry, MockScope, ParsedModule,
+    SnapshotSize, TestBlock, ViMockCall,
 };
 
 /// Tree-sitter-based TypeScript/TSX parser that extracts test metadata from
@@ -18,6 +19,9 @@ struct Context {
     hook_calls: Vec<HookCall>,
     test_blocks: Vec<TestBlock>,
     describe_blocks: Vec<DescribeBlock>,
+    expects_outside_tests: Vec<ExpectOutsideTest>,
+    imports_node_test: bool,
+    snapshot_sizes: Vec<SnapshotSize>,
 }
 
 impl TsParser {
@@ -65,6 +69,9 @@ impl TsParser {
             test_blocks: ctx.test_blocks,
             describe_blocks: ctx.describe_blocks,
             has_fake_timers,
+            expects_outside_tests: ctx.expects_outside_tests,
+            imports_node_test: ctx.imports_node_test,
+            snapshot_sizes: ctx.snapshot_sizes,
         })
     }
 
@@ -85,6 +92,9 @@ impl TsParser {
                     let text = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
                     ctx.imports.push(text);
                     if let Some(entry) = Self::parse_import(child, source) {
+                        if entry.source == "node:test" {
+                            ctx.imports_node_test = true;
+                        }
                         ctx.imports_parsed.push(entry);
                     }
                 }
@@ -98,6 +108,7 @@ impl TsParser {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn handle_call(
         node: Node,
         source: &str,
@@ -117,6 +128,32 @@ impl TsParser {
             .unwrap_or("")
             .to_string();
 
+        // Track expect() calls at module level (outside test blocks)
+        if scope == MockScope::Module && func_name == "expect" {
+            ctx.expects_outside_tests.push(ExpectOutsideTest {
+                line: node.start_position().row + 1,
+            });
+        }
+
+        // Detect snapshot matcher calls with inline content
+        if full_callee.ends_with(".toMatchInlineSnapshot")
+            || full_callee.ends_with(".toMatchSnapshot")
+        {
+            if let Some(args) = node.child_by_field_name("arguments") {
+                if args.named_child_count() > 0 {
+                    if let Some(first) = args.named_child(0) {
+                        if first.kind() == "string" || first.kind() == "template_string" {
+                            let content = first.utf8_text(source.as_bytes()).unwrap_or("");
+                            ctx.snapshot_sizes.push(SnapshotSize {
+                                line: first.start_position().row + 1,
+                                size: content.lines().count(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         // vi.mock(...) — module-scope hoisted mock when at module scope, but we
         // record it with the actual lexical scope so rules can decide.
         if full_callee == "vi.mock" {
@@ -126,10 +163,18 @@ impl TsParser {
         }
 
         match func_name.as_str() {
-            "test" | "it" => {
-                if let Some(tb) =
-                    Self::extract_test(node, source, path, describe_depth, is_skip, is_only)
-                {
+            "test" | "it" | "fit" | "xit" => {
+                let uses_fit_or_xit =
+                    full_callee.starts_with("fit") || full_callee.starts_with("xit");
+                if let Some(tb) = Self::extract_test(
+                    node,
+                    source,
+                    path,
+                    describe_depth,
+                    is_skip,
+                    is_only,
+                    uses_fit_or_xit,
+                ) {
                     ctx.test_blocks.push(tb);
                 }
                 // Recurse into body with Test scope so nested vi.* calls
@@ -138,7 +183,7 @@ impl TsParser {
                     Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
                 }
             }
-            "describe" => {
+            "describe" | "fdescribe" | "xdescribe" => {
                 // Record describe block for .only detection
                 let name_node = node
                     .child_by_field_name("arguments")
@@ -146,12 +191,27 @@ impl TsParser {
                 let name = name_node
                     .and_then(|n| Self::string_value(n, source))
                     .unwrap_or_default();
+                let title_is_template_literal =
+                    name_node.is_some_and(|n| n.kind() == "template_string");
+                let title_is_empty = name.is_empty();
+
+                let is_async = node
+                    .child_by_field_name("arguments")
+                    .and_then(|args| args.named_child(1))
+                    .is_some_and(|cb| {
+                        let text = cb.utf8_text(source.as_bytes()).unwrap_or("");
+                        text.starts_with("async")
+                    });
+
                 ctx.describe_blocks.push(DescribeBlock {
                     name,
                     file_path: path.to_path_buf(),
                     line: node.start_position().row + 1,
                     is_only,
                     depth: describe_depth,
+                    title_is_template_literal,
+                    title_is_empty,
+                    is_async,
                 });
 
                 if let Some(body) = Self::callback_body(node) {
@@ -294,9 +354,7 @@ impl TsParser {
                                     .child_by_field_name("name")
                                     .and_then(|n| n.utf8_text(source.as_bytes()).ok())
                                     .unwrap_or("");
-                                if !name.is_empty() {
-                                    entry.named.push(name.to_string());
-                                } else {
+                                if name.is_empty() {
                                     // Fallback: first identifier child.
                                     for k in 0..spec.named_child_count() {
                                         if let Some(c) = spec.named_child(k) {
@@ -312,6 +370,8 @@ impl TsParser {
                                             }
                                         }
                                     }
+                                } else {
+                                    entry.named.push(name.to_string());
                                 }
                             }
                         }
@@ -377,6 +437,7 @@ impl TsParser {
         describe_depth: usize,
         is_skip: bool,
         is_only: bool,
+        uses_fit_or_xit: bool,
     ) -> Option<TestBlock> {
         let args = node.child_by_field_name("arguments")?;
         if args.named_child_count() < 1 {
@@ -394,6 +455,16 @@ impl TsParser {
         };
 
         let st = body.map_or_else(Analysis::default, |b| Self::analyze(b, source));
+
+        let title_is_template_literal = args
+            .named_child(0)
+            .is_some_and(|n| n.kind() == "template_string");
+
+        // Detect done callback pattern (parameter named "done" in test callback)
+        let has_done_callback = node
+            .child_by_field_name("arguments")
+            .and_then(|args| args.named_child(1))
+            .is_some_and(|cb| Self::has_done_param(cb, source));
 
         Some(TestBlock {
             name,
@@ -413,7 +484,57 @@ impl TsParser {
             unawaited_async_assertions: st.unawaited_async_assertions,
             uses_fake_timers: st.uses_fake_timers,
             uses_random: st.uses_random,
+            has_expect_call_without_assertion: st.has_expect_call_without_assertion,
+            has_return_of_expect: st.has_return_of_expect,
+            title_is_template_literal,
+            has_async_expect_wrapper: st.has_async_expect_wrapper,
+            uses_fit_or_xit,
+            has_done_callback,
+            has_conditional_expect: st.has_conditional_expect,
         })
+    }
+
+    fn has_done_param(cb: Node, source: &str) -> bool {
+        if cb.kind() != "arrow_function" && cb.kind() != "function_expression" {
+            return false;
+        }
+        let params = cb.child_by_field_name("parameters").or_else(|| {
+            for i in 0..cb.named_child_count() {
+                let child = cb.named_child(i)?;
+                if child.kind() == "formal_parameters" {
+                    return Some(child);
+                }
+            }
+            None
+        });
+        if let Some(params) = params {
+            for i in 0..params.named_child_count() {
+                if let Some(param) = params.named_child(i) {
+                    match param.kind() {
+                        "identifier"
+                            if param.utf8_text(source.as_bytes()).unwrap_or("") == "done" =>
+                        {
+                            return true;
+                        }
+                        "required_parameter" => {
+                            // required_parameter wraps an identifier or pattern
+                            for j in 0..param.named_child_count() {
+                                if let Some(inner) = param.named_child(j) {
+                                    if inner.kind() == "identifier"
+                                        && inner.utf8_text(source.as_bytes()).unwrap_or("")
+                                            == "done"
+                                    {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        false
     }
 
     fn string_value(node: Node, source: &str) -> Option<String> {
@@ -470,13 +591,47 @@ impl TsParser {
             "call_expression" => {
                 let func = node.child_by_field_name("function").unwrap();
                 let text = func.utf8_text(source.as_bytes()).unwrap_or("");
-                if text.starts_with("expect") {
+                // Only count expect() calls where the function is a simple identifier
+                // (not a chained member expression like expect(x).toBe).
+                let is_expect_call = func.kind() == "identifier" && text == "expect";
+                if is_expect_call {
                     st.assertion_count += 1;
-                    if (text.contains(".resolves") || text.contains(".rejects"))
-                        && !Self::is_awaited(node)
-                    {
-                        st.unawaited_async_assertions += 1;
+                    // Mark expect inside conditional
+                    if st.in_conditional {
+                        st.has_conditional_expect = true;
                     }
+                    // Check if expect() is called without a chained assertion method.
+                    // If the expect call is inside a member_expression that is itself
+                    // inside a call_expression, it has a chained assertion (e.g. expect(x).toBe(y)).
+                    let has_chained_assertion = Self::has_parent_member_call(node);
+                    if !has_chained_assertion {
+                        st.has_expect_call_without_assertion = true;
+                    }
+                    // Check if expect() wraps an async function.
+                    if let Some(args) = node.child_by_field_name("arguments") {
+                        if let Some(first_arg) = args.named_child(0) {
+                            if first_arg.kind() == "arrow_function"
+                                || first_arg.kind() == "function_expression"
+                            {
+                                let func_text =
+                                    first_arg.utf8_text(source.as_bytes()).unwrap_or("");
+                                if func_text.starts_with("async") {
+                                    st.has_async_expect_wrapper = true;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // For non-expect calls, walk the function field to find nested expect calls
+                    // (e.g., expect(x).toBe(y) or expect(async () => ...).not.toThrow()).
+                    Self::walk_body(func, source, st);
+                }
+                // Check for unawaited async assertions (.resolves/.rejects).
+                // This applies to any call that contains these in its text.
+                if (text.contains(".resolves") || text.contains(".rejects"))
+                    && !Self::is_awaited(node)
+                {
+                    st.unawaited_async_assertions += 1;
                 }
                 if text == "setTimeout" {
                     st.uses_settimeout = true;
@@ -505,12 +660,28 @@ impl TsParser {
             }
             "if_statement" | "switch_statement" => {
                 st.has_conditional = true;
+                let prev = st.in_conditional;
+                st.in_conditional = true;
+                for i in 0..node.named_child_count() {
+                    let child = node.named_child(i).unwrap();
+                    Self::walk_body(child, source, st);
+                }
+                st.in_conditional = prev;
+                return;
             }
             "try_statement" => {
                 st.has_try_catch = true;
             }
             "return_statement" => {
                 st.has_return = true;
+                // Check if return contains an expect call.
+                for i in 0..node.named_child_count() {
+                    let child = node.named_child(i).unwrap();
+                    if Self::contains_expect_call(child, source) {
+                        st.has_return_of_expect = true;
+                        break;
+                    }
+                }
             }
             _ => {}
         }
@@ -519,6 +690,46 @@ impl TsParser {
             let child = node.named_child(i).unwrap();
             Self::walk_body(child, source, st);
         }
+    }
+
+    /// Check if a node is an `expect()` call inside a member expression chain
+    /// (e.g., expect(x).toBe(y) — the expect call has a parent `member_expression`
+    /// which is inside another `call_expression`).
+    fn has_parent_member_call(node: Node) -> bool {
+        let mut curr = node;
+        while let Some(parent) = curr.parent() {
+            if parent.kind() == "member_expression" {
+                // Check if this member_expression is the function of a call_expression.
+                if let Some(grandparent) = parent.parent() {
+                    if grandparent.kind() == "call_expression" {
+                        return true;
+                    }
+                }
+            }
+            curr = parent;
+        }
+        false
+    }
+
+    /// Check if a subtree contains an `expect()` call.
+    fn contains_expect_call(node: Node, source: &str) -> bool {
+        if node.kind() == "call_expression" {
+            if let Some(func) = node.child_by_field_name("function") {
+                if func.kind() == "identifier" {
+                    let text = func.utf8_text(source.as_bytes()).unwrap_or("");
+                    if text == "expect" {
+                        return true;
+                    }
+                }
+            }
+        }
+        for i in 0..node.named_child_count() {
+            let child = node.named_child(i).unwrap();
+            if Self::contains_expect_call(child, source) {
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -534,6 +745,11 @@ struct Analysis {
     unawaited_async_assertions: usize,
     uses_fake_timers: bool,
     uses_random: bool,
+    has_expect_call_without_assertion: bool,
+    has_return_of_expect: bool,
+    has_async_expect_wrapper: bool,
+    has_conditional_expect: bool,
+    in_conditional: bool,
 }
 
 #[cfg(test)]
