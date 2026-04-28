@@ -66,9 +66,24 @@ impl LintEngine {
                 all_modules: &group_modules,
             };
             for rule in &rules {
+                // Skip disabled rules
+                if config.rules.is_disabled(rule.id()) {
+                    continue;
+                }
                 for (local_idx, module) in group_modules.iter().enumerate() {
                     let global_idx = indices[local_idx];
                     let mut v = rule.check(module, &ctx);
+                    // Apply severity overrides
+                    if let Some(override_sev) = config.rules.severity_override(rule.id()) {
+                        for violation in &mut v {
+                            violation.severity = match override_sev.to_ascii_lowercase().as_str() {
+                                "error" => crate::models::Severity::Error,
+                                "warning" => crate::models::Severity::Warning,
+                                "info" => crate::models::Severity::Info,
+                                _ => violation.severity,
+                            };
+                        }
+                    }
                     // Filter suppressed violations
                     let suppression = SuppressionMap::parse(&sources[global_idx]);
                     v.retain(|violation| {

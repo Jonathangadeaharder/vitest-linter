@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -11,6 +12,15 @@ const DEFAULT_INTEGRATION_GLOB: &str = "**/*.integration.test.{ts,tsx,js,jsx}";
 struct RawConfig {
     #[serde(default)]
     deps: RawDepsConfig,
+    #[serde(default)]
+    rules: RawRulesConfig,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawRulesConfig {
+    /// Per-rule severity overrides: {"VITEST-FLK-001": "off", "VITEST-MNT-001": "warning"}
+    #[serde(default)]
+    select: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -33,6 +43,29 @@ struct RawBannedSingleton {
 #[derive(Debug)]
 pub struct Config {
     pub deps: DepsConfig,
+    pub rules: RulesConfig,
+}
+
+#[derive(Debug, Default)]
+pub struct RulesConfig {
+    /// Per-rule severity overrides. Key = rule ID, value = "off" | "info" | "warning" | "error"
+    pub select: HashMap<String, String>,
+}
+
+impl RulesConfig {
+    /// Returns `true` if the given rule is turned off.
+    #[must_use]
+    pub fn is_disabled(&self, rule_id: &str) -> bool {
+        self.select
+            .get(rule_id)
+            .is_some_and(|v| v.to_ascii_lowercase() == "off")
+    }
+
+    /// Returns an overridden severity string for the rule, if any.
+    #[must_use]
+    pub fn severity_override(&self, rule_id: &str) -> Option<&str> {
+        self.select.get(rule_id).map(|s| s.as_str())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -95,6 +128,9 @@ impl Config {
                 banned_singletons,
                 integration_test_glob,
             },
+            rules: RulesConfig {
+                select: raw.rules.select,
+            },
         })
     }
 }
@@ -108,6 +144,7 @@ impl Default for Config {
                 banned_singletons: Vec::new(),
                 integration_test_glob,
             },
+            rules: RulesConfig::default(),
         }
     }
 }
