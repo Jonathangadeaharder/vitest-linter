@@ -401,7 +401,7 @@ impl TsParser {
             has_multiple_expects: st.assertion_count > 1,
             is_skipped: is_skip,
             is_only,
-            is_nested: describe_depth > 1,
+            is_nested: describe_depth > 3,
             has_return_statement: st.has_return,
             unawaited_async_assertions: st.unawaited_async_assertions,
             uses_fake_timers: st.uses_fake_timers,
@@ -605,10 +605,14 @@ test.skip('skipped', () => {
             r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('nested', () => {
-            expect(1).toBe(1);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deeply nested', () => {
+                    expect(1).toBe(1);
+                });
+            });
         });
     });
 });
@@ -816,10 +820,14 @@ test('renders label', () => {
             r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('deep', () => {
-            expect(1).toBe(1);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deep', () => {
+                    expect(1).toBe(1);
+                });
+            });
         });
     });
 }, config);
@@ -833,7 +841,7 @@ describe('outer', () => {
         assert_eq!(module.test_blocks.len(), 1);
         assert!(
             module.test_blocks[0].is_nested,
-            "test inside nested describe should be is_nested"
+            "test inside 4-level nested describe should be is_nested"
         );
         assert!(module.test_blocks[0].has_assertions);
     }

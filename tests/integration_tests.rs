@@ -266,18 +266,22 @@ test.skip('is skipped', () => {
 }
 
 #[test]
-fn str001_nested_describe() {
+fn str001_deeply_nested_describe() {
     let dir = TempDir::new().unwrap();
     let path = write_fixture(
         &dir,
-        "nested.test.ts",
+        "deeply_nested.test.ts",
         r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('deeply nested', () => {
-            expect(true).toBe(true);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deeply nested', () => {
+                    expect(true).toBe(true);
+                });
+            });
         });
     });
 });
@@ -286,7 +290,7 @@ describe('outer', () => {
     let engine = LintEngine::new().unwrap();
     let violations = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-STR-001");
-    assert!(v.is_some(), "Expected VITEST-STR-001 violation");
+    assert!(v.is_some(), "Expected VITEST-STR-001 violation for 4-level nesting");
     assert_eq!(v.unwrap().rule_name, "NestedDescribeRule");
 }
 
@@ -941,6 +945,105 @@ test('uses fake timers', () => {
     assert!(
         find_violation(&violations, "VITEST-FLK-004").is_none(),
         "Should not trigger FLK-004 when afterEach has vi.useRealTimers()"
+    );
+}
+
+#[test]
+fn mnt008_mock_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "mock_no_cleanup.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+
+vi.mock('./some-module', () => ({ default: {} }));
+
+test('uses mock', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(v.is_some(), "Expected VITEST-MNT-008 violation");
+    assert_eq!(v.unwrap().rule_name, "MissingMockCleanupRule");
+}
+
+#[test]
+fn mnt008_mock_with_cleanup_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "mock_with_cleanup.test.ts",
+        r#"
+import { vi, test, expect, afterEach } from 'vitest';
+
+vi.mock('./some-module', () => ({ default: {} }));
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+test('uses mock safely', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-008").is_none(),
+        "Should not trigger MNT-008 when afterEach has vi.restoreAllMocks()"
+    );
+}
+
+#[test]
+fn mnt008_no_mock_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "no_mock.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('no mocks', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-008").is_none(),
+        "Should not trigger MNT-008 without vi.mock()"
+    );
+}
+
+#[test]
+fn str001_shallow_nesting_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "shallow_nesting.test.ts",
+        r#"
+import { describe, test, expect } from 'vitest';
+
+describe('outer', () => {
+    describe('inner', () => {
+        test('shallow', () => {
+            expect(true).toBe(true);
+        });
+    });
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-STR-001").is_none(),
+        "2-level nesting should NOT trigger STR-001 (threshold is > 3)"
     );
 }
 

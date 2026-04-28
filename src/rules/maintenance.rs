@@ -1,4 +1,4 @@
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 pub struct NoAssertionRule;
@@ -384,5 +384,69 @@ impl Rule for FocusedTestRule {
         }
 
         out
+    }
+}
+
+pub struct MissingMockCleanupRule;
+
+const MOCK_CLEANUP_CALLS: &[&str] = &[
+    "vi.restoreAllMocks",
+    "vi.clearAllMocks",
+    "vi.resetAllMocks",
+];
+
+impl Rule for MissingMockCleanupRule {
+    fn id(&self) -> &'static str {
+        "VITEST-MNT-008"
+    }
+    fn name(&self) -> &'static str {
+        "MissingMockCleanupRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Maintenance
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        if module.vi_mocks.is_empty() {
+            return vec![];
+        }
+
+        let has_cleanup = module.hook_calls.iter().any(|h| {
+            h.kind == HookKind::AfterEach
+                && h.vi_calls
+                    .iter()
+                    .any(|c| MOCK_CLEANUP_CALLS.iter().any(|mc| c == mc))
+        });
+
+        if has_cleanup {
+            return vec![];
+        }
+
+        // Report once per file (on first vi.mock line)
+        let first_mock = module.vi_mocks.iter().min_by_key(|m| m.line);
+        if let Some(mock) = first_mock {
+            vec![Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "vi.mock('{}') used without afterEach cleanup — mocks may leak between tests",
+                    mock.source
+                ),
+                file_path: module.file_path.clone(),
+                line: mock.line,
+                col: None,
+                suggestion: Some(
+                    "Add afterEach(() => { vi.restoreAllMocks() }) to clean up mocks between tests"
+                        .to_string(),
+                ),
+                test_name: None,
+            }]
+        } else {
+            vec![]
+        }
     }
 }
