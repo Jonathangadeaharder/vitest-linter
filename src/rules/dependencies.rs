@@ -114,8 +114,12 @@ impl Rule for ProductionSingletonImportRule {
 
 pub struct ResetEscapeHatchRule;
 
-const ESCAPE_HATCH_CALLS: &[&str] =
-    &["vi.resetModules", "vi.restoreAllMocks", "vi.unmock", "vi.doUnmock"];
+const ESCAPE_HATCH_CALLS: &[&str] = &[
+    "vi.resetModules",
+    "vi.restoreAllMocks",
+    "vi.unmock",
+    "vi.doUnmock",
+];
 
 impl Rule for ResetEscapeHatchRule {
     fn id(&self) -> &'static str {
@@ -203,7 +207,10 @@ vi.mock('../infrastructure/database', () => ({ db: {} }));
 [deps]
 banned_mock_paths = ["**/infrastructure/database"]
 "#);
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = BannedModuleMockRule.check(&module, &ctx);
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-DEP-001");
@@ -222,7 +229,10 @@ vi.mock('./local-helper');
 [deps]
 banned_mock_paths = ["**/infrastructure/database"]
 "#);
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = BannedModuleMockRule.check(&module, &ctx);
         assert!(v.is_empty());
     }
@@ -237,7 +247,10 @@ vi.mock('../infrastructure/database');
             "noconfig.test.ts",
         );
         let cfg = Config::default();
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = BannedModuleMockRule.check(&module, &ctx);
         assert!(v.is_empty());
     }
@@ -255,7 +268,10 @@ import { progressPersistence } from './progress-persistence';
 from = "**/progress-persistence"
 names = ["progressPersistence"]
 "#);
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = ProductionSingletonImportRule.check(&module, &ctx);
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-DEP-002");
@@ -274,7 +290,10 @@ import { progressPersistence } from './progress-persistence';
 from = "**/progress-persistence"
 names = ["progressPersistence"]
 "#);
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = ProductionSingletonImportRule.check(&module, &ctx);
         assert!(v.is_empty());
     }
@@ -292,7 +311,10 @@ import { ProgressPersistenceService } from './progress-persistence';
 from = "**/progress-persistence"
 names = ["progressPersistence"]
 "#);
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = ProductionSingletonImportRule.check(&module, &ctx);
         assert!(v.is_empty());
     }
@@ -310,7 +332,10 @@ beforeEach(() => {
             "hooks.test.ts",
         );
         let cfg = Config::default();
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = ResetEscapeHatchRule.check(&module, &ctx);
         assert_eq!(v.len(), 2);
         assert!(v.iter().all(|x| x.rule_id == "VITEST-DEP-003"));
@@ -326,7 +351,10 @@ beforeEach(() => { vi.clearAllMocks(); });
             "ok.test.ts",
         );
         let cfg = Config::default();
-        let ctx = LintContext { config: &cfg, all_modules: &[] };
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
         let v = ResetEscapeHatchRule.check(&module, &ctx);
         assert!(v.is_empty());
     }

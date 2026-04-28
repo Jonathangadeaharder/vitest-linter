@@ -144,9 +144,9 @@ pub fn matches_path(matchers: &[GlobMatcher], source: &str) -> bool {
     }
     let normalized = source.trim_start_matches("./");
     let stripped = trim_relative_prefix(normalized);
-    matchers.iter().any(|g| {
-        g.is_match(source) || g.is_match(normalized) || g.is_match(stripped)
-    })
+    matchers
+        .iter()
+        .any(|g| g.is_match(source) || g.is_match(normalized) || g.is_match(stripped))
 }
 
 fn trim_relative_prefix(s: &str) -> &str {
