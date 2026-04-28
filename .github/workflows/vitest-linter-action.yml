@@ -1,0 +1,32 @@
+name: Vitest Linter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  lint-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run vitest-linter (SARIF)
+        run: |
+          curl -sSL https://github.com/Jonathangadeaharder/vitest-linter/releases/latest/download/vitest-linter-linux-x86_64 -o vitest-linter
+          chmod +x vitest-linter
+          ./vitest-linter --format sarif --output results.sarif
+        continue-on-error: true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif

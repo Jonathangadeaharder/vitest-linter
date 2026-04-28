@@ -1,0 +1,23 @@
+{
+  "name": "vitest-linter",
+  "version": "0.1.0",
+  "description": "Fast, zero-config test-smell linter for Vitest test suites",
+  "keywords": ["vitest", "linter", "testing", "test-smells", "quality"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jonathangadeaharder/vitest-linter.git"
+  },
+  "bin": {
+    "vitest-linter": "bin/vitest-linter"
+  },
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
+  "optionalDependencies": {
+    "vitest-linter-darwin-x86_64": "0.1.0",
+    "vitest-linter-darwin-arm64": "0.1.0",
+    "vitest-linter-linux-x86_64": "0.1.0",
+    "vitest-linter-linux-arm64": "0.1.0",
+    "vitest-linter-win32-x86_64": "0.1.0"
+  }
+}
