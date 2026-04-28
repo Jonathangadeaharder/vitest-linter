@@ -121,7 +121,9 @@ impl LintEngine {
         let dir = if path.is_dir() {
             path.to_path_buf()
         } else {
-            path.parent().unwrap_or(Path::new(".")).to_path_buf()
+            path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf()
         };
         let mut cur = Some(dir.as_path());
         while let Some(d) = cur {
@@ -155,7 +157,7 @@ impl LintEngine {
                             let name = entry.file_name().to_string_lossy().to_string();
                             is_test_file(&name)
                         })
-                        .map(|entry| entry.into_path())
+                        .map(walkdir::DirEntry::into_path)
                         .collect()
                 } else {
                     vec![]

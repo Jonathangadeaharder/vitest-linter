@@ -25,6 +25,7 @@ pub trait Rule {
 pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
+pub mod no_rules;
 pub mod validation;
 
 #[must_use]
@@ -53,6 +54,17 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(validation::ValidDescribeCallbackRule),
         Box::new(validation::ValidTitleRule),
         Box::new(validation::NoUnneededAsyncExpectFunctionRule),
+        // E12: No-rules
+        Box::new(no_rules::NoStandaloneExpectRule),
+        Box::new(no_rules::NoIdenticalTitleRule),
+        Box::new(no_rules::NoCommentedOutTestsRule),
+        Box::new(no_rules::NoTestPrefixesRule),
+        Box::new(no_rules::NoDuplicateHooksRule),
+        Box::new(no_rules::NoImportNodeTestRule),
+        Box::new(no_rules::NoInterpolationInSnapshotsRule),
+        Box::new(no_rules::NoLargeSnapshotsRule),
+        Box::new(no_rules::NoDoneCallbackRule),
+        Box::new(no_rules::NoConditionalExpectRule),
     ]
 }
 
@@ -63,7 +75,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 23);
+        assert_eq!(rules.len(), 33);
     }
 
     #[test]
@@ -93,6 +105,16 @@ mod tests {
             "VITEST-VAL-003",
             "VITEST-VAL-004",
             "VITEST-VAL-005",
+            "VITEST-NO-001",
+            "VITEST-NO-002",
+            "VITEST-NO-003",
+            "VITEST-NO-005",
+            "VITEST-NO-006",
+            "VITEST-NO-007",
+            "VITEST-NO-008",
+            "VITEST-NO-009",
+            "VITEST-NO-013",
+            "VITEST-NO-014",
         ];
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         for id in &expected {
@@ -134,10 +156,10 @@ mod tests {
             .filter(|r| r.category() == Category::Validation)
             .collect();
         assert_eq!(flk.len(), 5);
-        assert_eq!(mnt.len(), 8);
-        assert_eq!(str_.len(), 2);
-        assert_eq!(dep.len(), 3);
-        assert_eq!(val.len(), 5);
+        assert_eq!(mnt.len(), 13);
+        assert_eq!(str_.len(), 4);
+        assert_eq!(dep.len(), 4);
+        assert_eq!(val.len(), 7);
     }
 
     #[test]
@@ -167,6 +189,16 @@ mod tests {
             ("VITEST-VAL-003", "ValidDescribeCallbackRule"),
             ("VITEST-VAL-004", "ValidTitleRule"),
             ("VITEST-VAL-005", "NoUnneededAsyncExpectFunctionRule"),
+            ("VITEST-NO-001", "NoStandaloneExpectRule"),
+            ("VITEST-NO-002", "NoIdenticalTitleRule"),
+            ("VITEST-NO-003", "NoCommentedOutTestsRule"),
+            ("VITEST-NO-005", "NoTestPrefixesRule"),
+            ("VITEST-NO-006", "NoDuplicateHooksRule"),
+            ("VITEST-NO-007", "NoImportNodeTestRule"),
+            ("VITEST-NO-008", "NoInterpolationInSnapshotsRule"),
+            ("VITEST-NO-009", "NoLargeSnapshotsRule"),
+            ("VITEST-NO-013", "NoDoneCallbackRule"),
+            ("VITEST-NO-014", "NoConditionalExpectRule"),
         ];
         for (id, name) in &expected {
             let rule = rules.iter().find(|r| r.id() == *id).unwrap();

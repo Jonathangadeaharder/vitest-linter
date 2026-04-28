@@ -107,23 +107,14 @@ impl SuppressionMap {
                         active_ranges.entry(rule_id).or_insert(line_num);
                     }
                 }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-            } else {
-                // Regular comment - propagate range suppressions
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
             }
+            Self::propagate_range(
+                line_num,
+                &active_ranges,
+                active_all_range,
+                &enable_exceptions,
+                &mut map,
+            );
         }
 
         map
@@ -134,7 +125,7 @@ impl SuppressionMap {
         active_ranges: &HashMap<String, usize>,
         active_all_range: Option<usize>,
         enable_exceptions: &HashSet<String>,
-        map: &mut SuppressionMap,
+        map: &mut Self,
     ) {
         if active_all_range.is_some() || !active_ranges.is_empty() {
             let mut suppressed = HashSet::new();
