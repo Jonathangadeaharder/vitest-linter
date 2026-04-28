@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
 
@@ -31,25 +32,32 @@ impl LintEngine {
             }
         }
 
-        // Load config from the first input path (walks up to find
-        // .vitest-linter.toml). Empty paths or no config falls back to defaults.
-        let config = paths
-            .first()
-            .map(|p| Config::load_from(p))
-            .transpose()?
-            .unwrap_or_default();
+        // Group modules by their resolved config root so each module is
+        // evaluated against the nearest .vitest-linter.toml.
+        let mut groups: HashMap<PathBuf, (Config, Vec<usize>)> = HashMap::new();
+        for (idx, module) in modules.iter().enumerate() {
+            let config_root = Self::resolve_config_root(&module.file_path);
+            let entry = groups.entry(config_root).or_insert_with_key(|root| {
+                let config = Config::load_from(root).unwrap_or_default();
+                (config, Vec::new())
+            });
+            entry.1.push(idx);
+        }
 
         let rules = all_rules();
         let mut violations = Vec::new();
-        let ctx = LintContext {
-            config: &config,
-            all_modules: &modules,
-        };
 
-        for rule in &rules {
-            for module in &modules {
-                let mut v = rule.check(module, &ctx);
-                violations.append(&mut v);
+        for (config, indices) in groups.values() {
+            let group_modules: Vec<&_> = indices.iter().map(|i| &modules[*i]).collect();
+            let ctx = LintContext {
+                config,
+                all_modules: &modules,
+            };
+            for rule in &rules {
+                for module in &group_modules {
+                    let mut v = rule.check(module, &ctx);
+                    violations.append(&mut v);
+                }
             }
         }
 
@@ -60,6 +68,24 @@ impl LintEngine {
         });
 
         Ok(violations)
+    }
+
+    /// Walk up from the module's path to find the directory containing
+    /// `.vitest-linter.toml`, falling back to the module's parent directory.
+    fn resolve_config_root(path: &Path) -> PathBuf {
+        let dir = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent().unwrap_or(Path::new(".")).to_path_buf()
+        };
+        let mut cur = Some(dir.as_path());
+        while let Some(d) = cur {
+            if d.join(".vitest-linter.toml").is_file() {
+                return d.to_path_buf();
+            }
+            cur = d.parent();
+        }
+        dir
     }
 
     fn discover_files(paths: &[PathBuf]) -> Vec<PathBuf> {

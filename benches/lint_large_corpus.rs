@@ -13,11 +13,26 @@ use tempfile::TempDir;
 use vitest_linter::engine::LintEngine;
 
 /// Produces a single `.test.ts` file with `n_tests` test blocks.
-/// Each block exercises a variety of patterns so the parser has real work to do.
+/// Each block exercises a variety of patterns so the parser has real work to do,
+/// including module-scope vi.mock calls and hook-contained vi.* calls that
+/// exercise the DEP-001/DEP-003 dependency rules.
 fn generate_test_file(n_tests: usize) -> String {
     let mut buf = String::from(
-        r#"import { describe, it, expect, vi } from 'vitest';
+        r#"import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
+import { db } from '../infrastructure/database';
+
+vi.mock('../infrastructure/database', () => ({ db: {} }));
+vi.mock('../infrastructure/event-bus', () => ({ emit: vi.fn() }));
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.restoreAllMocks();
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 "#,
     );
@@ -75,8 +90,22 @@ import axios from 'axios';
 }
 
 /// Write `n_files` test files into `dir`, each containing `tests_per_file` tests.
+/// Also writes a `.vitest-linter.toml` config that activates DEP rules.
 fn write_corpus(dir: &TempDir, n_files: usize, tests_per_file: usize) -> Vec<PathBuf> {
     let content = generate_test_file(tests_per_file);
+    // Write config that enables dependency rules.
+    let config = r#"[deps]
+banned_mock_paths = [
+  "**/infrastructure/database",
+  "**/infrastructure/event-bus",
+]
+
+[[deps.banned_singletons]]
+from  = "**/infrastructure/database"
+names = ["db"]
+"#;
+    std::fs::write(dir.path().join(".vitest-linter.toml"), config).expect("write config");
+
     (0..n_files)
         .map(|i| {
             let path = dir.path().join(format!("file_{i:04}.test.ts"));

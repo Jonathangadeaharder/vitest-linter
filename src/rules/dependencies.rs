@@ -1,5 +1,5 @@
 use crate::config::matches_path;
-use crate::models::{Category, MockScope, ParsedModule, Severity, Violation};
+use crate::models::{Category, ParsedModule, Severity, Violation};
 use crate::rules::{LintContext, Rule};
 
 pub struct BannedModuleMockRule;
@@ -25,7 +25,7 @@ impl Rule for BannedModuleMockRule {
         module
             .vi_mocks
             .iter()
-            .filter(|m| m.scope == MockScope::Module && matches_path(banned, &m.source))
+            .filter(|m| matches_path(banned, &m.source))
             .map(|m| Violation {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -69,9 +69,8 @@ impl Rule for ProductionSingletonImportRule {
             return vec![];
         }
         // Skip integration tests — production singletons are the contract there.
-        let path_str = module.file_path.to_string_lossy();
         if let Some(g) = ctx.config.deps.integration_test_glob.as_ref() {
-            if g.is_match(path_str.as_ref()) {
+            if g.is_match(&module.file_path) {
                 return vec![];
             }
         }
@@ -84,6 +83,7 @@ impl Rule for ProductionSingletonImportRule {
                 {
                     continue;
                 }
+                // Check named imports.
                 for name in &imp.named {
                     if ban.names.iter().any(|n| n == name) {
                         out.push(Violation {
@@ -94,6 +94,29 @@ impl Rule for ProductionSingletonImportRule {
                             message: format!(
                                 "Importing production singleton `{}` from `{}` triggers its constructor side effects in unit tests",
                                 name, imp.source
+                            ),
+                            file_path: module.file_path.clone(),
+                            line: imp.line,
+                            col: None,
+                            suggestion: Some(
+                                "Construct a fresh instance with fakes (DI). Singletons belong in *.integration.test.ts only."
+                                    .to_string(),
+                            ),
+                            test_name: None,
+                        });
+                    }
+                }
+                // Check default import.
+                if let Some(default_name) = &imp.default {
+                    if ban.names.iter().any(|n| n == default_name) {
+                        out.push(Violation {
+                            rule_id: self.id().to_string(),
+                            rule_name: self.name().to_string(),
+                            severity: self.severity(),
+                            category: self.category(),
+                            message: format!(
+                                "Importing production singleton `{}` from `{}` triggers its constructor side effects in unit tests",
+                                default_name, imp.source
                             ),
                             file_path: module.file_path.clone(),
                             line: imp.line,
@@ -317,6 +340,28 @@ names = ["progressPersistence"]
         };
         let v = ProductionSingletonImportRule.check(&module, &ctx);
         assert!(v.is_empty());
+    }
+
+    #[test]
+    fn dep_002_flags_default_import_singleton() {
+        let module = parse(
+            r#"
+import db from './infrastructure/database';
+"#,
+            "pipeline.test.ts",
+        );
+        let cfg = cfg(r#"
+[[deps.banned_singletons]]
+from = "**/infrastructure/database"
+names = ["db"]
+"#);
+        let ctx = LintContext {
+            config: &cfg,
+            all_modules: &[],
+        };
+        let v = ProductionSingletonImportRule.check(&module, &ctx);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].rule_id, "VITEST-DEP-002");
     }
 
     #[test]

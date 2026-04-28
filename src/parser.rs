@@ -183,7 +183,20 @@ impl TsParser {
             return None;
         }
         let first = args.named_child(0)?;
-        let src = Self::string_value(first, source)?;
+        // Handle vi.mock("path"), vi.mock(`path`), and vi.mock(import("path"))
+        let src = Self::string_value(first, source).or_else(|| {
+            // Check for import("path") call expression.
+            if first.kind() == "call_expression" {
+                if let Some(func) = first.child_by_field_name("function") {
+                    if func.kind() == "import" && first.child_by_field_name("arguments").is_some() {
+                        let import_args = first.child_by_field_name("arguments")?;
+                        let import_first = import_args.named_child(0)?;
+                        return Self::string_value(import_first, source);
+                    }
+                }
+            }
+            None
+        })?;
         Some(ViMockCall {
             source: src,
             line: node.start_position().row + 1,
@@ -887,5 +900,24 @@ afterEach(() => {
             .find(|h| h.kind == HookKind::AfterEach)
             .unwrap();
         assert!(after.vi_calls.iter().any(|c| c == "vi.clearAllMocks"));
+    }
+
+    #[test]
+    fn parse_vi_mock_dynamic_import() {
+        let dir = write_temp(
+            r#"
+import { vi } from 'vitest';
+
+vi.mock(import('../infrastructure/database'));
+"#,
+            "dynmock.test.ts",
+        );
+        let path = dir.path().join("dynmock.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.vi_mocks.len(), 1);
+        assert_eq!(module.vi_mocks[0].source, "../infrastructure/database");
+        assert_eq!(module.vi_mocks[0].scope, MockScope::Module);
     }
 }
