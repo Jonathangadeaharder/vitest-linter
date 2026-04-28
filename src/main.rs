@@ -12,7 +12,7 @@ struct Cli {
     #[arg(default_values = &["."])]
     paths: Vec<PathBuf>,
 
-    #[arg(long, default_value = "terminal", value_parser = ["terminal", "json"])]
+    #[arg(long, default_value = "terminal", value_parser = ["terminal", "json", "sarif"])]
     format: String,
 
     #[arg(long)]

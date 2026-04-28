@@ -405,6 +405,7 @@ impl TsParser {
             has_return_statement: st.has_return,
             unawaited_async_assertions: st.unawaited_async_assertions,
             uses_fake_timers: st.uses_fake_timers,
+            uses_random: st.uses_random,
         })
     }
 
@@ -479,6 +480,9 @@ impl TsParser {
                 if text == "vi.useFakeTimers" {
                     st.uses_fake_timers = true;
                 }
+                if text == "Math.random" || text == "crypto.randomUUID" {
+                    st.uses_random = true;
+                }
                 let args = node.child_by_field_name("arguments").unwrap();
                 for i in 0..args.named_child_count() {
                     let child = args.named_child(i).unwrap();
@@ -522,6 +526,7 @@ struct Analysis {
     has_return: bool,
     unawaited_async_assertions: usize,
     uses_fake_timers: bool,
+    uses_random: bool,
 }
 
 #[cfg(test)]

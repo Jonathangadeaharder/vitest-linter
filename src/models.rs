@@ -75,6 +75,7 @@ pub struct TestBlock {
     pub has_return_statement: bool,
     pub unawaited_async_assertions: usize,
     pub uses_fake_timers: bool,
+    pub uses_random: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -198,3 +198,44 @@ impl Rule for FakeTimersCleanupRule {
             .collect()
     }
 }
+
+pub struct NonDeterministicRule;
+
+impl Rule for NonDeterministicRule {
+    fn id(&self) -> &'static str {
+        "VITEST-FLK-005"
+    }
+    fn name(&self) -> &'static str {
+        "NonDeterministicRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Flakiness
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        module
+            .test_blocks
+            .iter()
+            .filter(|tb| tb.uses_random)
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "Test '{}' uses Math.random() or crypto.randomUUID() — results are non-deterministic",
+                    tb.name
+                ),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Mock Math.random() or use a seeded PRNG for deterministic tests".to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
+    }
+}

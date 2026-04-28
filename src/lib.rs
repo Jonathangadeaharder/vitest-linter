@@ -81,6 +81,13 @@ pub fn run_cli(
             Some(path) => fs::write(path, json)?,
             None => println!("{json}"),
         }
+    } else if format == "sarif" {
+        let sarif = build_sarif(&violations);
+        let json = serde_json::to_string_pretty(&sarif)?;
+        match output {
+            Some(path) => fs::write(path, json)?,
+            None => println!("{json}"),
+        }
     } else {
         let mut out: Box<dyn Write> = match output {
             Some(path) => Box::new(fs::File::create(path)?),
@@ -137,4 +144,61 @@ pub fn run_cli(
 
     let has_errors = violations.iter().any(|v| v.severity == Severity::Error);
     Ok(has_errors)
+}
+
+fn build_sarif(violations: &[models::Violation]) -> serde_json::Value {
+    let results: Vec<serde_json::Value> = violations
+        .iter()
+        .map(|v| {
+            let level = match v.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+                Severity::Info => "note",
+            };
+            serde_json::json!({
+                "ruleId": v.rule_id,
+                "level": level,
+                "message": { "text": v.message },
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": v.file_path.display().to_string()
+                        },
+                        "region": {
+                            "startLine": v.line
+                        }
+                    }
+                }],
+                "properties": {
+                    "ruleName": v.rule_name,
+                    "category": format!("{:?}", v.category),
+                    "suggestion": v.suggestion,
+                    "testName": v.test_name
+                }
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "vitest-linter",
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "informationUri": "https://github.com/Jonathangadeaharder/vitest-linter",
+                    "rules": violations.iter().map(|v| serde_json::json!({
+                        "id": v.rule_id,
+                        "name": v.rule_name,
+                        "shortDescription": { "text": v.message },
+                        "properties": {
+                            "category": format!("{:?}", v.category)
+                        }
+                    })).collect::<Vec<_>>()
+                }
+            },
+            "results": results
+        }]
+    })
 }

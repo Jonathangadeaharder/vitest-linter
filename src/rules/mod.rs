@@ -25,6 +25,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(flakiness::DateMockRule),
         Box::new(flakiness::NetworkImportRule),
         Box::new(flakiness::FakeTimersCleanupRule),
+        Box::new(flakiness::NonDeterministicRule),
         Box::new(maintenance::NoAssertionRule),
         Box::new(maintenance::MultipleExpectRule),
         Box::new(maintenance::ConditionalLogicRule),
@@ -48,7 +49,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 17);
+        assert_eq!(rules.len(), 18);
     }
 
     #[test]
@@ -59,6 +60,7 @@ mod tests {
             "VITEST-FLK-002",
             "VITEST-FLK-003",
             "VITEST-FLK-004",
+            "VITEST-FLK-005",
             "VITEST-MNT-001",
             "VITEST-MNT-002",
             "VITEST-MNT-003",
@@ -108,7 +110,7 @@ mod tests {
             .iter()
             .filter(|r| r.category() == Category::Dependencies)
             .collect();
-        assert_eq!(flk.len(), 4);
+        assert_eq!(flk.len(), 5);
         assert_eq!(mnt.len(), 8);
         assert_eq!(str_.len(), 2);
         assert_eq!(dep.len(), 3);
@@ -122,6 +124,7 @@ mod tests {
             ("VITEST-FLK-002", "DateMockRule"),
             ("VITEST-FLK-003", "NetworkImportRule"),
             ("VITEST-FLK-004", "FakeTimersCleanupRule"),
+            ("VITEST-FLK-005", "NonDeterministicRule"),
             ("VITEST-MNT-001", "NoAssertionRule"),
             ("VITEST-MNT-002", "MultipleExpectRule"),
             ("VITEST-MNT-003", "ConditionalLogicRule"),

@@ -83,13 +83,38 @@ pub struct BannedSingleton {
 
 impl Config {
     /// Load `.vitest-linter.toml` by walking up from `start` until found, or
-    /// return an empty config when no file exists.
+    /// return an empty config when no file exists. Also checks `package.json`
+    /// for a `vitest-linter` key and merges it.
     #[allow(clippy::missing_errors_doc)]
     pub fn load_from(start: &Path) -> Result<Self> {
-        let Some(found) = find_config(start) else {
-            return Ok(Self::default());
+        let mut config = if let Some(found) = find_config(start) {
+            Self::from_path(&found)?
+        } else {
+            Self::default()
         };
-        Self::from_path(&found)
+
+        // Check for package.json override
+        if let Some(pkg_dir) = find_package_json_dir(start) {
+            let pkg_path = pkg_dir.join("package.json");
+            if let Ok(pkg_text) = std::fs::read_to_string(&pkg_path) {
+                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&pkg_text) {
+                    if let Some(vl_config) = pkg.get("vitest-linter") {
+                        if let Some(select) = vl_config.get("select").and_then(|s| s.as_object()) {
+                            for (key, val) in select {
+                                if let Some(severity) = val.as_str() {
+                                    config
+                                        .rules
+                                        .select
+                                        .insert(key.clone(), severity.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(config)
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -165,6 +190,22 @@ fn find_config(start: &Path) -> Option<PathBuf> {
         let candidate = dir.join(CONFIG_FILE_NAME);
         if candidate.is_file() {
             return Some(candidate);
+        }
+        cur = dir.parent().map(Path::to_path_buf);
+    }
+    None
+}
+
+fn find_package_json_dir(start: &Path) -> Option<PathBuf> {
+    let mut cur = if start.is_dir() {
+        Some(start.to_path_buf())
+    } else {
+        start.parent().map(Path::to_path_buf)
+    };
+    while let Some(dir) = cur {
+        let candidate = dir.join("package.json");
+        if candidate.is_file() {
+            return Some(dir);
         }
         cur = dir.parent().map(Path::to_path_buf);
     }
