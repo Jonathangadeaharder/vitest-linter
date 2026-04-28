@@ -22,10 +22,13 @@ pub trait Rule {
     fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation>;
 }
 
+pub mod consistency;
 pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
 pub mod no_rules;
+pub mod prefer;
+pub mod require;
 pub mod validation;
 
 #[must_use]
@@ -65,6 +68,25 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(no_rules::NoLargeSnapshotsRule),
         Box::new(no_rules::NoDoneCallbackRule),
         Box::new(no_rules::NoConditionalExpectRule),
+        // E13: Prefer-rules
+        Box::new(prefer::PreferToBeRule),
+        Box::new(prefer::PreferToContainRule),
+        Box::new(prefer::PreferToHaveLengthRule),
+        Box::new(prefer::PreferSpyOnRule),
+        Box::new(prefer::PreferCalledOnceRule),
+        Box::new(prefer::PreferHooksOnTopRule),
+        Box::new(prefer::PreferHooksInOrderRule),
+        Box::new(prefer::PreferTodoRule),
+        Box::new(prefer::PreferMockPromiseShorthandRule),
+        Box::new(prefer::PreferExpectResolvesRule),
+        // E14: Require-rules
+        Box::new(require::RequireHookRule),
+        Box::new(require::RequireTopLevelDescribeRule),
+        Box::new(require::RequireToThrowMessageRule),
+        // E15: Consistency-rules
+        Box::new(consistency::ConsistentTestItRule),
+        Box::new(consistency::ConsistentVitestViRule),
+        Box::new(consistency::HoistedApisOnTopRule),
     ]
 }
 
@@ -75,7 +97,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 33);
+        assert_eq!(rules.len(), 49);
     }
 
     #[test]
@@ -115,6 +137,22 @@ mod tests {
             "VITEST-NO-009",
             "VITEST-NO-013",
             "VITEST-NO-014",
+            "VITEST-PREF-001",
+            "VITEST-PREF-002",
+            "VITEST-PREF-003",
+            "VITEST-PREF-005",
+            "VITEST-PREF-007",
+            "VITEST-PREF-009",
+            "VITEST-PREF-010",
+            "VITEST-PREF-012",
+            "VITEST-PREF-013",
+            "VITEST-PREF-014",
+            "VITEST-REQ-001",
+            "VITEST-REQ-002",
+            "VITEST-REQ-003",
+            "VITEST-CON-001",
+            "VITEST-CON-003",
+            "VITEST-CON-004",
         ];
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         for id in &expected {
@@ -156,10 +194,10 @@ mod tests {
             .filter(|r| r.category() == Category::Validation)
             .collect();
         assert_eq!(flk.len(), 5);
-        assert_eq!(mnt.len(), 13);
-        assert_eq!(str_.len(), 4);
-        assert_eq!(dep.len(), 4);
-        assert_eq!(val.len(), 7);
+        assert_eq!(mnt.len(), 15);
+        assert_eq!(str_.len(), 9);
+        assert_eq!(dep.len(), 6);
+        assert_eq!(val.len(), 14);
     }
 
     #[test]
@@ -199,6 +237,22 @@ mod tests {
             ("VITEST-NO-009", "NoLargeSnapshotsRule"),
             ("VITEST-NO-013", "NoDoneCallbackRule"),
             ("VITEST-NO-014", "NoConditionalExpectRule"),
+            ("VITEST-PREF-001", "PreferToBeRule"),
+            ("VITEST-PREF-002", "PreferToContainRule"),
+            ("VITEST-PREF-003", "PreferToHaveLengthRule"),
+            ("VITEST-PREF-005", "PreferSpyOnRule"),
+            ("VITEST-PREF-007", "PreferCalledOnceRule"),
+            ("VITEST-PREF-009", "PreferHooksOnTopRule"),
+            ("VITEST-PREF-010", "PreferHooksInOrderRule"),
+            ("VITEST-PREF-012", "PreferTodoRule"),
+            ("VITEST-PREF-013", "PreferMockPromiseShorthandRule"),
+            ("VITEST-PREF-014", "PreferExpectResolvesRule"),
+            ("VITEST-REQ-001", "RequireHookRule"),
+            ("VITEST-REQ-002", "RequireTopLevelDescribeRule"),
+            ("VITEST-REQ-003", "RequireToThrowMessageRule"),
+            ("VITEST-CON-001", "ConsistentTestItRule"),
+            ("VITEST-CON-003", "ConsistentVitestViRule"),
+            ("VITEST-CON-004", "HoistedApisOnTopRule"),
         ];
         for (id, name) in &expected {
             let rule = rules.iter().find(|r| r.id() == *id).unwrap();

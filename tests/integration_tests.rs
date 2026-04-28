@@ -2561,3 +2561,438 @@ test('unconditional expect', () => {
         "Should not trigger NO-014 for unconditional expect"
     );
 }
+
+// --- VITEST-PREF-001: PreferToBeRule ---
+
+#[test]
+fn pref001_to_equal_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tobe.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toBe', () => {
+    expect(true).toEqual(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-001");
+    assert!(v.is_some(), "Expected VITEST-PREF-001 violation");
+    assert_eq!(v.unwrap().rule_name, "PreferToBeRule");
+}
+
+#[test]
+fn pref001_to_be_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tobe_ok.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toBe', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PREF-001").is_none(),
+        "Should not trigger PREF-001 for toBe"
+    );
+}
+
+// --- VITEST-PREF-002: PreferToContainRule ---
+
+#[test]
+fn pref002_length_gt_zero_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tocontain.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toContain', () => {
+    expect([1, 2, 3].includes(2)).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-002");
+    assert!(v.is_some(), "Expected VITEST-PREF-002 violation");
+}
+
+#[test]
+fn pref002_to_contain_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tocontain_ok.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toContain', () => {
+    expect([1, 2, 3]).toContain(2);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PREF-002").is_none(),
+        "Should not trigger PREF-002 for toContain"
+    );
+}
+
+// --- VITEST-PREF-003: PreferToHaveLengthRule ---
+
+#[test]
+fn pref003_length_be_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tohavelength.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toHaveLength', () => {
+    expect(arr.length).toBe(3);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-003");
+    assert!(v.is_some(), "Expected VITEST-PREF-003 violation");
+}
+
+#[test]
+fn pref003_to_have_length_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tohavelength_ok.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use toHaveLength', () => {
+    expect(arr).toHaveLength(3);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PREF-003").is_none(),
+        "Should not trigger PREF-003 for toHaveLength"
+    );
+}
+
+// --- VITEST-PREF-005: PreferSpyOnRule ---
+
+#[test]
+fn pref005_jest_fn_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "spyon.test.ts",
+        r#"
+import { test, vi } from 'vitest';
+
+test('use spyOn', () => {
+    const mock = vi.fn();
+    obj.method = mock;
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-005");
+    assert!(v.is_some(), "Expected VITEST-PREF-005 violation");
+}
+
+#[test]
+fn pref005_spy_on_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "spyon_ok.test.ts",
+        r#"
+import { test, vi } from 'vitest';
+
+test('use spyOn', () => {
+    vi.spyOn(obj, 'method');
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PREF-005").is_none(),
+        "Should not trigger PREF-005 for spyOn"
+    );
+}
+
+// --- VITEST-PREF-007: PreferCalledOnceRule ---
+
+#[test]
+fn pref007_to_have_been_called_times_1_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "calledonce.test.ts",
+        r#"
+import { test, expect, vi } from 'vitest';
+
+test('use toHaveBeenCalledOnce', () => {
+    expect(mockFn).toHaveBeenCalledTimes(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-007");
+    assert!(v.is_some(), "Expected VITEST-PREF-007 violation");
+}
+
+#[test]
+fn pref007_to_have_been_called_once_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "calledonce_ok.test.ts",
+        r#"
+import { test, expect, vi } from 'vitest';
+
+test('use toHaveBeenCalledOnce', () => {
+    expect(mockFn).toHaveBeenCalledOnce();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PREF-007").is_none(),
+        "Should not trigger PREF-007 for toHaveBeenCalledOnce"
+    );
+}
+
+// --- VITEST-PREF-009: PreferHooksOnTopRule ---
+
+#[test]
+fn pref009_hook_after_test_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "hooksontop.test.ts",
+        r#"
+import { test, vi, beforeEach } from 'vitest';
+
+test('a', () => {});
+beforeEach(() => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-009");
+    assert!(v.is_some(), "Expected VITEST-PREF-009 violation");
+}
+
+// --- VITEST-PREF-010: PreferHooksInOrderRule ---
+
+#[test]
+fn pref010_wrong_hook_order_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "hooksinorder.test.ts",
+        r#"
+import { beforeEach, beforeAll } from 'vitest';
+
+beforeEach(() => {});
+beforeAll(() => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-010");
+    assert!(v.is_some(), "Expected VITEST-PREF-010 violation");
+}
+
+// --- VITEST-PREF-012: PreferTodoRule ---
+
+#[test]
+fn pref012_empty_test_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "todo.test.ts",
+        r#"
+import { test } from 'vitest';
+
+test('todo this', () => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-012");
+    assert!(v.is_some(), "Expected VITEST-PREF-012 violation");
+}
+
+// --- VITEST-PREF-013: PreferMockPromiseShorthandRule ---
+
+#[test]
+fn pref013_mock_implementation_with_resolve_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "mockshorthand.test.ts",
+        r#"
+import { vi } from 'vitest';
+
+vi.fn().mockImplementation(() => Promise.resolve(42));
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-013");
+    assert!(v.is_some(), "Expected VITEST-PREF-013 violation");
+}
+
+// --- VITEST-PREF-014: PreferExpectResolvesRule ---
+
+#[test]
+fn pref014_expect_await_rejects_to_be_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "expectresolves.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('use resolves', async () => {
+    expect(await Promise.resolve(1)).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-014");
+    assert!(v.is_some(), "Expected VITEST-PREF-014 violation");
+}
+
+// --- VITEST-REQ-001: RequireHookRule ---
+
+#[test]
+fn req001_setup_outside_hook_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "requirehook.test.ts",
+        r#"
+import { test, vi } from 'vitest';
+
+vi.mock('./foo');
+test('a', () => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-REQ-001");
+    assert!(v.is_some(), "Expected VITEST-REQ-001 violation");
+}
+
+// --- VITEST-REQ-002: RequireTopLevelDescribeRule ---
+
+#[test]
+fn req002_orphan_test_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "toplevel.test.ts",
+        r#"
+import { test, describe } from 'vitest';
+
+describe('group', () => {
+    test('inside', () => {});
+});
+
+test('orphan', () => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-REQ-002");
+    assert!(v.is_some(), "Expected VITEST-REQ-002 violation");
+}
+
+// --- VITEST-REQ-003: RequireToThrowMessageRule ---
+
+#[test]
+fn req003_to_throw_no_message_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "tothrowmsg.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('require message', () => {
+    expect(() => { throw new Error('fail'); }).toThrow();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-REQ-003");
+    assert!(v.is_some(), "Expected VITEST-REQ-003 violation");
+}
+
+// --- VITEST-CON-001: ConsistentTestItRule ---
+
+#[test]
+fn con001_mixed_test_it_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "consistent.test.ts",
+        r#"
+import { test, it } from 'vitest';
+
+test('a', () => {});
+it('b', () => {});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-CON-001");
+    assert!(v.is_some(), "Expected VITEST-CON-001 violation");
+}
+
+// --- VITEST-CON-004: HoistedApisOnTopRule ---
+
+#[test]
+fn con004_mock_after_test_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "hoisted.test.ts",
+        r#"
+import { test, vi } from 'vitest';
+
+test('a', () => {});
+vi.mock('./foo');
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-CON-004");
+    assert!(v.is_some(), "Expected VITEST-CON-004 violation");
+}
