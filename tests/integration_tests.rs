@@ -480,7 +480,7 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true, false, "HEAD").unwrap();
 
     assert!(has_errors, "Should have errors (MNT-001 is Error severity)");
 
@@ -508,7 +508,7 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true, false, "HEAD").unwrap();
 
     assert!(!has_errors, "Clean file should have no errors");
 
@@ -531,7 +531,7 @@ test('cond', () => { if (true) { expect(1).toBe(1); } });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
 
     assert!(has_errors, "Should have errors from MNT-001");
 
@@ -565,7 +565,7 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
 
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
@@ -1341,7 +1341,7 @@ test('timeout', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Suggestion:"));
@@ -1358,7 +1358,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 
@@ -1374,7 +1374,7 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
 }
@@ -1449,7 +1449,7 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false, false, "HEAD").unwrap();
     assert!(has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
@@ -1468,7 +1468,7 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false, false, "HEAD").unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
@@ -1594,7 +1594,7 @@ test('has if', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
 }
@@ -1610,7 +1610,7 @@ import { test, expect } from 'vitest';
 test('clean', () => { expect(1).toBe(1); });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(!has_errors);
 }
 
@@ -1625,7 +1625,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "terminal", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 

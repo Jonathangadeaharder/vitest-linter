@@ -20,12 +20,25 @@ struct Cli {
 
     #[arg(long, default_value_t = false)]
     no_color: bool,
+
+    #[arg(long, default_value_t = false)]
+    incremental: bool,
+
+    #[arg(long, default_value = "HEAD")]
+    base: String,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let has_errors = run_cli(&cli.paths, &cli.format, cli.output.as_deref(), cli.no_color)?;
+    let has_errors = run_cli(
+        &cli.paths,
+        &cli.format,
+        cli.output.as_deref(),
+        cli.no_color,
+        cli.incremental,
+        &cli.base,
+    )?;
 
     if has_errors {
         std::process::exit(1);
