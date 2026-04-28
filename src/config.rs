@@ -66,7 +66,7 @@ impl RulesConfig {
     /// Returns an overridden severity string for the rule, if any.
     #[must_use]
     pub fn severity_override(&self, rule_id: &str) -> Option<&str> {
-        self.select.get(rule_id).map(std::string::String::as_str)
+        self.select.get(rule_id).map(|s| s.as_str())
     }
 }
 
@@ -214,10 +214,9 @@ fn find_package_json_dir(start: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Match a `vi.mock(<source>)` source string against the banlist.
-///
-/// Matches both the literal pattern and a normalized form without
-/// leading `./` or `../` segments to keep config simple for callers.
+/// Match a `vi.mock(<source>)` source string against the banlist. The check
+/// matches both the literal pattern and a normalized form without leading `./`
+/// or `../` segments to keep config simple for callers.
 #[must_use]
 pub fn matches_path(matchers: &[GlobMatcher], source: &str) -> bool {
     if matchers.is_empty() {

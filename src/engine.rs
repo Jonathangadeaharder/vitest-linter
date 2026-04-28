@@ -157,7 +157,7 @@ impl LintEngine {
                             let name = entry.file_name().to_string_lossy().to_string();
                             is_test_file(&name)
                         })
-                        .map(walkdir::DirEntry::into_path)
+                        .map(|entry| entry.into_path())
                         .collect()
                 } else {
                     vec![]

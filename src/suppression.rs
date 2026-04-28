@@ -107,14 +107,22 @@ impl SuppressionMap {
                         active_ranges.entry(rule_id).or_insert(line_num);
                     }
                 }
+                Self::propagate_range(
+                    line_num,
+                    &active_ranges,
+                    active_all_range,
+                    &enable_exceptions,
+                    &mut map,
+                );
+            } else {
+                Self::propagate_range(
+                    line_num,
+                    &active_ranges,
+                    active_all_range,
+                    &enable_exceptions,
+                    &mut map,
+                );
             }
-            Self::propagate_range(
-                line_num,
-                &active_ranges,
-                active_all_range,
-                &enable_exceptions,
-                &mut map,
-            );
         }
 
         map

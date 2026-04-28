@@ -442,7 +442,7 @@ impl Rule for MissingMockCleanupRule {
 
         // Report once per file (on first vi.mock line)
         let first_mock = module.vi_mocks.iter().min_by_key(|m| m.line);
-        first_mock.map_or_else(Vec::new, |mock| {
+        if let Some(mock) = first_mock {
             vec![Violation {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
@@ -461,6 +461,8 @@ impl Rule for MissingMockCleanupRule {
                 ),
                 test_name: None,
             }]
-        })
+        } else {
+            vec![]
+        }
     }
 }

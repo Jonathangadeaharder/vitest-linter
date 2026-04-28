@@ -195,7 +195,6 @@ impl TsParser {
                     name_node.is_some_and(|n| n.kind() == "template_string");
                 let title_is_empty = name.is_empty();
 
-                // Check if describe callback is async.
                 let is_async = node
                     .child_by_field_name("arguments")
                     .and_then(|args| args.named_child(1))
@@ -203,6 +202,7 @@ impl TsParser {
                         let text = cb.utf8_text(source.as_bytes()).unwrap_or("");
                         text.starts_with("async")
                     });
+
 
                 ctx.describe_blocks.push(DescribeBlock {
                     name,
@@ -646,7 +646,6 @@ impl TsParser {
                 if text == "Math.random" || text == "crypto.randomUUID" {
                     st.uses_random = true;
                 }
-                // Walk arguments to find nested expect calls.
                 let args = node.child_by_field_name("arguments").unwrap();
                 for i in 0..args.named_child_count() {
                     let child = args.named_child(i).unwrap();
