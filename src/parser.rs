@@ -3,7 +3,7 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 use crate::models::{
-    HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
+    DescribeBlock, HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
 };
 
 pub struct TsParser;
@@ -15,6 +15,7 @@ struct Context {
     vi_mocks: Vec<ViMockCall>,
     hook_calls: Vec<HookCall>,
     test_blocks: Vec<TestBlock>,
+    describe_blocks: Vec<DescribeBlock>,
 }
 
 impl TsParser {
@@ -57,6 +58,7 @@ impl TsParser {
             vi_mocks: ctx.vi_mocks,
             hook_calls: ctx.hook_calls,
             test_blocks: ctx.test_blocks,
+            describe_blocks: ctx.describe_blocks,
             has_fake_timers,
         })
     }
@@ -104,7 +106,7 @@ impl TsParser {
             return;
         };
 
-        let (func_name, is_skip) = Self::parse_callee(func_node, source);
+        let (func_name, is_skip, is_only) = Self::parse_callee(func_node, source);
         let full_callee = func_node
             .utf8_text(source.as_bytes())
             .unwrap_or("")
@@ -120,7 +122,7 @@ impl TsParser {
 
         match func_name.as_str() {
             "test" | "it" => {
-                if let Some(tb) = Self::extract_test(node, source, path, describe_depth, is_skip) {
+                if let Some(tb) = Self::extract_test(node, source, path, describe_depth, is_skip, is_only) {
                     ctx.test_blocks.push(tb);
                 }
                 // Recurse into body with Test scope so nested vi.* calls
@@ -130,6 +132,21 @@ impl TsParser {
                 }
             }
             "describe" => {
+                // Record describe block for .only detection
+                let name_node = node
+                    .child_by_field_name("arguments")
+                    .and_then(|args| args.named_child(0));
+                let name = name_node
+                    .and_then(|n| Self::string_value(n, source))
+                    .unwrap_or_default();
+                ctx.describe_blocks.push(DescribeBlock {
+                    name,
+                    file_path: path.to_path_buf(),
+                    line: node.start_position().row + 1,
+                    is_only,
+                    depth: describe_depth,
+                });
+
                 if let Some(body) = Self::callback_body(node) {
                     Self::collect(body, source, path, describe_depth + 1, scope, ctx);
                 } else {
@@ -298,19 +315,20 @@ impl TsParser {
         }
     }
 
-    fn parse_callee(node: Node, source: &str) -> (String, bool) {
+    fn parse_callee(node: Node, source: &str) -> (String, bool, bool) {
         match node.kind() {
             "identifier" => {
                 let name = node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                (name, false)
+                (name, false, false)
             }
             "member_expression" => {
                 let full = node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
                 let is_skip = full.contains(".skip") || full.contains(".todo");
+                let is_only = full.contains(".only");
                 let base = full.split('.').next().unwrap_or("").to_string();
-                (base, is_skip)
+                (base, is_skip, is_only)
             }
-            _ => (String::new(), false),
+            _ => (String::new(), false, false),
         }
     }
 
@@ -351,6 +369,7 @@ impl TsParser {
         path: &Path,
         describe_depth: usize,
         is_skip: bool,
+        is_only: bool,
     ) -> Option<TestBlock> {
         let args = node.child_by_field_name("arguments")?;
         if args.named_child_count() < 1 {
@@ -381,6 +400,7 @@ impl TsParser {
             uses_datemock: st.uses_datemock,
             has_multiple_expects: st.assertion_count > 1,
             is_skipped: is_skip,
+            is_only,
             is_nested: describe_depth > 1,
             has_return_statement: st.has_return,
             unawaited_async_assertions: st.unawaited_async_assertions,

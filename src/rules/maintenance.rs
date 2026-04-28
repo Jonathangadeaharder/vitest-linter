@@ -320,3 +320,69 @@ impl Rule for MissingAwaitAssertionRule {
             .collect()
     }
 }
+
+pub struct FocusedTestRule;
+
+impl Rule for FocusedTestRule {
+    fn id(&self) -> &'static str {
+        "VITEST-MNT-007"
+    }
+    fn name(&self) -> &'static str {
+        "FocusedTestRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    fn category(&self) -> Category {
+        Category::Maintenance
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        let mut out = Vec::new();
+
+        for tb in &module.test_blocks {
+            if tb.is_only {
+                out.push(Violation {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: self.severity(),
+                    category: self.category(),
+                    message: format!(
+                        "Focused test '{}' uses .only — all other tests in this file will be skipped",
+                        tb.name
+                    ),
+                    file_path: tb.file_path.clone(),
+                    line: tb.line,
+                    col: None,
+                    suggestion: Some(
+                        "Remove .only before committing. Focused tests mask failures in CI".to_string(),
+                    ),
+                    test_name: Some(tb.name.clone()),
+                });
+            }
+        }
+
+        for db in &module.describe_blocks {
+            if db.is_only {
+                out.push(Violation {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: self.severity(),
+                    category: self.category(),
+                    message: format!(
+                        "Focused describe '{}' uses .only — all other tests in this file will be skipped",
+                        db.name
+                    ),
+                    file_path: db.file_path.clone(),
+                    line: db.line,
+                    col: None,
+                    suggestion: Some(
+                        "Remove .only before committing. Focused tests mask failures in CI".to_string(),
+                    ),
+                    test_name: None,
+                });
+            }
+        }
+
+        out
+    }
+}

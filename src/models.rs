@@ -70,9 +70,19 @@ pub struct TestBlock {
     pub uses_datemock: bool,
     pub has_multiple_expects: bool,
     pub is_skipped: bool,
+    pub is_only: bool,
     pub is_nested: bool,
     pub has_return_statement: bool,
     pub unawaited_async_assertions: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct DescribeBlock {
+    pub name: String,
+    pub file_path: PathBuf,
+    pub line: usize,
+    pub is_only: bool,
+    pub depth: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +93,7 @@ pub struct ParsedModule {
     pub vi_mocks: Vec<ViMockCall>,
     pub hook_calls: Vec<HookCall>,
     pub test_blocks: Vec<TestBlock>,
+    pub describe_blocks: Vec<DescribeBlock>,
     pub has_fake_timers: bool,
 }
 

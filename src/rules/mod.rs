@@ -32,6 +32,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::NestedDescribeRule),
         Box::new(maintenance::ReturnInTestRule),
         Box::new(maintenance::MissingAwaitAssertionRule),
+        Box::new(maintenance::FocusedTestRule),
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
@@ -45,7 +46,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 14);
+        assert_eq!(rules.len(), 15);
     }
 
     #[test]
@@ -63,6 +64,7 @@ mod tests {
             "VITEST-STR-001",
             "VITEST-STR-002",
             "VITEST-MNT-006",
+            "VITEST-MNT-007",
             "VITEST-DEP-001",
             "VITEST-DEP-002",
             "VITEST-DEP-003",
@@ -103,7 +105,7 @@ mod tests {
             .filter(|r| r.category() == Category::Dependencies)
             .collect();
         assert_eq!(flk.len(), 3);
-        assert_eq!(mnt.len(), 6);
+        assert_eq!(mnt.len(), 7);
         assert_eq!(str_.len(), 2);
         assert_eq!(dep.len(), 3);
     }
@@ -123,6 +125,7 @@ mod tests {
             ("VITEST-STR-001", "NestedDescribeRule"),
             ("VITEST-STR-002", "ReturnInTestRule"),
             ("VITEST-MNT-006", "MissingAwaitAssertionRule"),
+            ("VITEST-MNT-007", "FocusedTestRule"),
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),

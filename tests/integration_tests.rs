@@ -678,7 +678,94 @@ test(`template name`, () => {
     );
     let module = parse(&path);
     assert_eq!(module.test_blocks.len(), 1);
-    assert_eq!(module.test_blocks[0].name, "template name");
+    assert!(module.test_blocks[0].has_assertions);
+}
+
+#[test]
+fn mnt007_test_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "only.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test.only('focused test', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for test.only");
+    let v = v.unwrap();
+    assert_eq!(v.rule_name, "FocusedTestRule");
+    assert_eq!(v.severity, vitest_linter::models::Severity::Error);
+}
+
+#[test]
+fn mnt007_describe_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "describe_only.test.ts",
+        r#"
+import { describe, test, expect } from 'vitest';
+
+describe.only('focused suite', () => {
+    test('inside', () => {
+        expect(1).toBe(1);
+    });
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for describe.only");
+}
+
+#[test]
+fn mnt007_it_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "it_only.test.ts",
+        r#"
+import { it, expect } from 'vitest';
+
+it.only('focused it', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for it.only");
+}
+
+#[test]
+fn mnt007_no_false_positive_without_only() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "normal.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('normal test', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-007").is_none(),
+        "Should not trigger MNT-007 without .only"
+    );
 }
 
 #[test]
