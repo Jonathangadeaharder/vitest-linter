@@ -16,7 +16,7 @@ impl Rule for NoAssertionRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -55,7 +55,7 @@ impl Rule for MultipleExpectRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -97,7 +97,7 @@ impl Rule for ConditionalLogicRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -137,7 +137,7 @@ impl Rule for TryCatchRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -176,7 +176,7 @@ impl Rule for EmptyTestRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -216,7 +216,7 @@ impl Rule for NestedDescribeRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -256,7 +256,7 @@ impl Rule for ReturnInTestRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -295,7 +295,7 @@ impl Rule for MissingAwaitAssertionRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _all_modules: &[ParsedModule]) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
         module
             .test_blocks
             .iter()

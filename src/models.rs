@@ -14,6 +14,7 @@ pub enum Category {
     Flakiness,
     Maintenance,
     Structure,
+    Dependencies,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -78,7 +79,47 @@ pub struct TestBlock {
 pub struct ParsedModule {
     pub file_path: PathBuf,
     pub imports: Vec<String>,
+    pub imports_parsed: Vec<ImportEntry>,
+    pub vi_mocks: Vec<ViMockCall>,
+    pub hook_calls: Vec<HookCall>,
     pub test_blocks: Vec<TestBlock>,
     pub has_fake_timers: bool,
 }
-// test
+
+#[derive(Debug, Clone)]
+pub struct ImportEntry {
+    pub source: String,
+    pub named: Vec<String>,
+    pub default: Option<String>,
+    pub namespace: Option<String>,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MockScope {
+    Module,
+    Hook,
+    Test,
+}
+
+#[derive(Debug, Clone)]
+pub struct ViMockCall {
+    pub source: String,
+    pub line: usize,
+    pub scope: MockScope,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookKind {
+    BeforeEach,
+    AfterEach,
+    BeforeAll,
+    AfterAll,
+}
+
+#[derive(Debug, Clone)]
+pub struct HookCall {
+    pub kind: HookKind,
+    pub line: usize,
+    pub vi_calls: Vec<String>,
+}

@@ -1,13 +1,20 @@
+use crate::config::Config;
 use crate::models::{Category, ParsedModule, Severity, Violation};
+
+pub struct LintContext<'a> {
+    pub config: &'a Config,
+    pub all_modules: &'a [ParsedModule],
+}
 
 pub trait Rule {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
     fn severity(&self) -> Severity;
     fn category(&self) -> Category;
-    fn check(&self, module: &ParsedModule, all_modules: &[ParsedModule]) -> Vec<Violation>;
+    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation>;
 }
 
+pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
 
@@ -25,6 +32,9 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::NestedDescribeRule),
         Box::new(maintenance::ReturnInTestRule),
         Box::new(maintenance::MissingAwaitAssertionRule),
+        Box::new(dependencies::BannedModuleMockRule),
+        Box::new(dependencies::ProductionSingletonImportRule),
+        Box::new(dependencies::ResetEscapeHatchRule),
     ]
 }
 
@@ -35,7 +45,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 11);
+        assert_eq!(rules.len(), 14);
     }
 
     #[test]
@@ -53,6 +63,9 @@ mod tests {
             "VITEST-STR-001",
             "VITEST-STR-002",
             "VITEST-MNT-006",
+            "VITEST-DEP-001",
+            "VITEST-DEP-002",
+            "VITEST-DEP-003",
         ];
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         for id in &expected {
@@ -85,9 +98,14 @@ mod tests {
             .iter()
             .filter(|r| r.category() == Category::Structure)
             .collect();
+        let dep: Vec<_> = rules
+            .iter()
+            .filter(|r| r.category() == Category::Dependencies)
+            .collect();
         assert_eq!(flk.len(), 3);
         assert_eq!(mnt.len(), 6);
         assert_eq!(str_.len(), 2);
+        assert_eq!(dep.len(), 3);
     }
 
     #[test]
@@ -105,6 +123,9 @@ mod tests {
             ("VITEST-STR-001", "NestedDescribeRule"),
             ("VITEST-STR-002", "ReturnInTestRule"),
             ("VITEST-MNT-006", "MissingAwaitAssertionRule"),
+            ("VITEST-DEP-001", "BannedModuleMockRule"),
+            ("VITEST-DEP-002", "ProductionSingletonImportRule"),
+            ("VITEST-DEP-003", "ResetEscapeHatchRule"),
         ];
         for (id, name) in &expected {
             let rule = rules.iter().find(|r| r.id() == *id).unwrap();
