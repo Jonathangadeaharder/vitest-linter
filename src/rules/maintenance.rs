@@ -389,11 +389,7 @@ impl Rule for FocusedTestRule {
 
 pub struct MissingMockCleanupRule;
 
-const MOCK_CLEANUP_CALLS: &[&str] = &[
-    "vi.restoreAllMocks",
-    "vi.clearAllMocks",
-    "vi.resetAllMocks",
-];
+const MOCK_CLEANUP_CALLS: &[&str] = &["vi.restoreAllMocks", "vi.clearAllMocks", "vi.resetAllMocks"];
 
 impl Rule for MissingMockCleanupRule {
     fn id(&self) -> &'static str {

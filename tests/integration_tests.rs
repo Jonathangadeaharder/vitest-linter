@@ -290,7 +290,10 @@ describe('level1', () => {
     let engine = LintEngine::new().unwrap();
     let violations = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-STR-001");
-    assert!(v.is_some(), "Expected VITEST-STR-001 violation for 4-level nesting");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-STR-001 violation for 4-level nesting"
+    );
     assert_eq!(v.unwrap().rule_name, "NestedDescribeRule");
 }
 
@@ -480,7 +483,15 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "json",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(has_errors, "Should have errors (MNT-001 is Error severity)");
 
@@ -508,7 +519,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "json",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(!has_errors, "Clean file should have no errors");
 
@@ -531,7 +550,15 @@ test('cond', () => { if (true) { expect(1).toBe(1); } });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(has_errors, "Should have errors from MNT-001");
 
@@ -565,7 +592,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
@@ -702,7 +737,10 @@ test.only('focused test', () => {
     let engine = LintEngine::new().unwrap();
     let violations = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-MNT-007");
-    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for test.only");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 violation for test.only"
+    );
     let v = v.unwrap();
     assert_eq!(v.rule_name, "FocusedTestRule");
     assert_eq!(v.severity, vitest_linter::models::Severity::Error);
@@ -727,7 +765,10 @@ describe.only('focused suite', () => {
     let engine = LintEngine::new().unwrap();
     let violations = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-MNT-007");
-    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for describe.only");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 violation for describe.only"
+    );
 }
 
 #[test]
@@ -1341,7 +1382,15 @@ test('timeout', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Suggestion:"));
@@ -1374,7 +1423,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
+    run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
 }
@@ -1449,7 +1506,15 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        false,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
@@ -1468,7 +1533,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false, false, "HEAD").unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        false,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
@@ -1594,7 +1667,15 @@ test('has if', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true, false, "HEAD").unwrap();
+    run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
 }

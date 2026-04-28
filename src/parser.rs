@@ -122,7 +122,9 @@ impl TsParser {
 
         match func_name.as_str() {
             "test" | "it" => {
-                if let Some(tb) = Self::extract_test(node, source, path, describe_depth, is_skip, is_only) {
+                if let Some(tb) =
+                    Self::extract_test(node, source, path, describe_depth, is_skip, is_only)
+                {
                     ctx.test_blocks.push(tb);
                 }
                 // Recurse into body with Test scope so nested vi.* calls

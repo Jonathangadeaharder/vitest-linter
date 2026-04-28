@@ -18,11 +18,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build vitest-linter
+        run: cargo build --release
+
       - name: Run vitest-linter (SARIF)
         run: |
-          curl -sSL https://github.com/Jonathangadeaharder/vitest-linter/releases/latest/download/vitest-linter-linux-x86_64 -o vitest-linter
-          chmod +x vitest-linter
-          ./vitest-linter --format sarif --output results.sarif
+          ./target/release/vitest-linter --format sarif --output results.sarif || true
         continue-on-error: true
 
       - name: Upload SARIF

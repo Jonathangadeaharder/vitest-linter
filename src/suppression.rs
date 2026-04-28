@@ -35,12 +35,7 @@ impl SuppressionMap {
                 text.trim()
             } else {
                 // Not a comment - propagate range suppressions
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &mut map,
-                );
+                Self::propagate_range(line_num, &active_ranges, active_all_range, &mut map);
                 continue;
             };
 
@@ -48,12 +43,7 @@ impl SuppressionMap {
                 let rules = parse_rule_ids(rest.trim());
                 let target_line = line_num + 1;
                 map.next_line.insert(target_line, rules);
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &mut map,
-                );
+                Self::propagate_range(line_num, &active_ranges, active_all_range, &mut map);
             } else if let Some(rest) = comment_text.strip_prefix(ENABLE) {
                 let rules = parse_rule_ids(rest.trim());
                 if rules.is_empty() {
@@ -64,12 +54,7 @@ impl SuppressionMap {
                         active_ranges.remove(rule_id);
                     }
                 }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &mut map,
-                );
+                Self::propagate_range(line_num, &active_ranges, active_all_range, &mut map);
             } else if let Some(rest) = comment_text.strip_prefix(DISABLE) {
                 let rules = parse_rule_ids(rest.trim());
                 if rules.is_empty() {
@@ -79,20 +64,10 @@ impl SuppressionMap {
                         active_ranges.entry(rule_id).or_insert(line_num);
                     }
                 }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &mut map,
-                );
+                Self::propagate_range(line_num, &active_ranges, active_all_range, &mut map);
             } else {
                 // Regular comment - propagate range suppressions
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &mut map,
-                );
+                Self::propagate_range(line_num, &active_ranges, active_all_range, &mut map);
             }
         }
 
