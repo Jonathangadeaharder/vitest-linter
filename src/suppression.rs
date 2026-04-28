@@ -44,9 +44,8 @@ impl SuppressionMap {
                 continue;
             };
 
-            if comment_text.starts_with(DISABLE_NEXT_LINE) {
-                let rest = comment_text[DISABLE_NEXT_LINE.len()..].trim();
-                let rules = parse_rule_ids(rest);
+            if let Some(rest) = comment_text.strip_prefix(DISABLE_NEXT_LINE) {
+                let rules = parse_rule_ids(rest.trim());
                 let target_line = line_num + 1;
                 map.next_line.insert(target_line, rules);
                 Self::propagate_range(
@@ -55,9 +54,8 @@ impl SuppressionMap {
                     active_all_range,
                     &mut map,
                 );
-            } else if comment_text.starts_with(ENABLE) {
-                let rest = comment_text[ENABLE.len()..].trim();
-                let rules = parse_rule_ids(rest);
+            } else if let Some(rest) = comment_text.strip_prefix(ENABLE) {
+                let rules = parse_rule_ids(rest.trim());
                 if rules.is_empty() {
                     active_all_range = None;
                     active_ranges.clear();

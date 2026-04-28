@@ -58,7 +58,7 @@ impl RulesConfig {
     pub fn is_disabled(&self, rule_id: &str) -> bool {
         self.select
             .get(rule_id)
-            .is_some_and(|v| v.to_ascii_lowercase() == "off")
+            .is_some_and(|v| v.eq_ignore_ascii_case("off"))
     }
 
     /// Returns an overridden severity string for the rule, if any.
