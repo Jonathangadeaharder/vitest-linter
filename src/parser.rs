@@ -3,9 +3,11 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 use crate::models::{
-    HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
+    DescribeBlock, HookCall, HookKind, ImportEntry, MockScope, ParsedModule, TestBlock, ViMockCall,
 };
 
+/// Tree-sitter-based TypeScript/TSX parser that extracts test metadata from
+/// Vitest test files.
 pub struct TsParser;
 
 #[derive(Default)]
@@ -15,14 +17,18 @@ struct Context {
     vi_mocks: Vec<ViMockCall>,
     hook_calls: Vec<HookCall>,
     test_blocks: Vec<TestBlock>,
+    describe_blocks: Vec<DescribeBlock>,
 }
 
 impl TsParser {
+    /// Create a new parser instance.
     #[allow(clippy::missing_errors_doc)]
     pub const fn new() -> anyhow::Result<Self> {
         Ok(Self)
     }
 
+    /// Parse a single test file at `path` and return the extracted module
+    /// metadata (test blocks, imports, mocks, hooks, etc.).
     #[allow(clippy::missing_errors_doc)]
     pub fn parse_file(&self, path: &Path) -> anyhow::Result<ParsedModule> {
         let mut parser = Parser::new();
@@ -57,6 +63,7 @@ impl TsParser {
             vi_mocks: ctx.vi_mocks,
             hook_calls: ctx.hook_calls,
             test_blocks: ctx.test_blocks,
+            describe_blocks: ctx.describe_blocks,
             has_fake_timers,
         })
     }
@@ -104,7 +111,7 @@ impl TsParser {
             return;
         };
 
-        let (func_name, is_skip) = Self::parse_callee(func_node, source);
+        let (func_name, is_skip, is_only) = Self::parse_callee(func_node, source);
         let full_callee = func_node
             .utf8_text(source.as_bytes())
             .unwrap_or("")
@@ -120,7 +127,9 @@ impl TsParser {
 
         match func_name.as_str() {
             "test" | "it" => {
-                if let Some(tb) = Self::extract_test(node, source, path, describe_depth, is_skip) {
+                if let Some(tb) =
+                    Self::extract_test(node, source, path, describe_depth, is_skip, is_only)
+                {
                     ctx.test_blocks.push(tb);
                 }
                 // Recurse into body with Test scope so nested vi.* calls
@@ -130,6 +139,21 @@ impl TsParser {
                 }
             }
             "describe" => {
+                // Record describe block for .only detection
+                let name_node = node
+                    .child_by_field_name("arguments")
+                    .and_then(|args| args.named_child(0));
+                let name = name_node
+                    .and_then(|n| Self::string_value(n, source))
+                    .unwrap_or_default();
+                ctx.describe_blocks.push(DescribeBlock {
+                    name,
+                    file_path: path.to_path_buf(),
+                    line: node.start_position().row + 1,
+                    is_only,
+                    depth: describe_depth,
+                });
+
                 if let Some(body) = Self::callback_body(node) {
                     Self::collect(body, source, path, describe_depth + 1, scope, ctx);
                 } else {
@@ -298,19 +322,20 @@ impl TsParser {
         }
     }
 
-    fn parse_callee(node: Node, source: &str) -> (String, bool) {
+    fn parse_callee(node: Node, source: &str) -> (String, bool, bool) {
         match node.kind() {
             "identifier" => {
                 let name = node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                (name, false)
+                (name, false, false)
             }
             "member_expression" => {
                 let full = node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
                 let is_skip = full.contains(".skip") || full.contains(".todo");
+                let is_only = full.contains(".only");
                 let base = full.split('.').next().unwrap_or("").to_string();
-                (base, is_skip)
+                (base, is_skip, is_only)
             }
-            _ => (String::new(), false),
+            _ => (String::new(), false, false),
         }
     }
 
@@ -351,6 +376,7 @@ impl TsParser {
         path: &Path,
         describe_depth: usize,
         is_skip: bool,
+        is_only: bool,
     ) -> Option<TestBlock> {
         let args = node.child_by_field_name("arguments")?;
         if args.named_child_count() < 1 {
@@ -381,9 +407,12 @@ impl TsParser {
             uses_datemock: st.uses_datemock,
             has_multiple_expects: st.assertion_count > 1,
             is_skipped: is_skip,
-            is_nested: describe_depth > 1,
+            is_only,
+            is_nested: describe_depth > 3,
             has_return_statement: st.has_return,
             unawaited_async_assertions: st.unawaited_async_assertions,
+            uses_fake_timers: st.uses_fake_timers,
+            uses_random: st.uses_random,
         })
     }
 
@@ -455,6 +484,12 @@ impl TsParser {
                 if text.starts_with("Date.") {
                     st.uses_datemock = true;
                 }
+                if text == "vi.useFakeTimers" {
+                    st.uses_fake_timers = true;
+                }
+                if text == "Math.random" || text == "crypto.randomUUID" {
+                    st.uses_random = true;
+                }
                 let args = node.child_by_field_name("arguments").unwrap();
                 for i in 0..args.named_child_count() {
                     let child = args.named_child(i).unwrap();
@@ -497,6 +532,8 @@ struct Analysis {
     uses_datemock: bool,
     has_return: bool,
     unawaited_async_assertions: usize,
+    uses_fake_timers: bool,
+    uses_random: bool,
 }
 
 #[cfg(test)]
@@ -580,10 +617,14 @@ test.skip('skipped', () => {
             r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('nested', () => {
-            expect(1).toBe(1);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deeply nested', () => {
+                    expect(1).toBe(1);
+                });
+            });
         });
     });
 });
@@ -791,10 +832,14 @@ test('renders label', () => {
             r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('deep', () => {
-            expect(1).toBe(1);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deep', () => {
+                    expect(1).toBe(1);
+                });
+            });
         });
     });
 }, config);
@@ -808,7 +853,7 @@ describe('outer', () => {
         assert_eq!(module.test_blocks.len(), 1);
         assert!(
             module.test_blocks[0].is_nested,
-            "test inside nested describe should be is_nested"
+            "test inside 4-level nested describe should be is_nested"
         );
         assert!(module.test_blocks[0].has_assertions);
     }

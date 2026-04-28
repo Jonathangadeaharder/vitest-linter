@@ -266,18 +266,22 @@ test.skip('is skipped', () => {
 }
 
 #[test]
-fn str001_nested_describe() {
+fn str001_deeply_nested_describe() {
     let dir = TempDir::new().unwrap();
     let path = write_fixture(
         &dir,
-        "nested.test.ts",
+        "deeply_nested.test.ts",
         r#"
 import { describe, test, expect } from 'vitest';
 
-describe('outer', () => {
-    describe('inner', () => {
-        test('deeply nested', () => {
-            expect(true).toBe(true);
+describe('level1', () => {
+    describe('level2', () => {
+        describe('level3', () => {
+            describe('level4', () => {
+                test('deeply nested', () => {
+                    expect(true).toBe(true);
+                });
+            });
         });
     });
 });
@@ -286,7 +290,10 @@ describe('outer', () => {
     let engine = LintEngine::new().unwrap();
     let violations = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-STR-001");
-    assert!(v.is_some(), "Expected VITEST-STR-001 violation");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-STR-001 violation for 4-level nesting"
+    );
     assert_eq!(v.unwrap().rule_name, "NestedDescribeRule");
 }
 
@@ -476,7 +483,15 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "json",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(has_errors, "Should have errors (MNT-001 is Error severity)");
 
@@ -504,7 +519,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.json");
-    let has_errors = run_cli(&[test_path], "json", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "json",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(!has_errors, "Clean file should have no errors");
 
@@ -527,7 +550,15 @@ test('cond', () => { if (true) { expect(1).toBe(1); } });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(has_errors, "Should have errors from MNT-001");
 
@@ -561,7 +592,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
 
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
@@ -678,7 +717,379 @@ test(`template name`, () => {
     );
     let module = parse(&path);
     assert_eq!(module.test_blocks.len(), 1);
-    assert_eq!(module.test_blocks[0].name, "template name");
+    assert!(module.test_blocks[0].has_assertions);
+}
+
+#[test]
+fn mnt007_test_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "only.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test.only('focused test', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 violation for test.only"
+    );
+    let v = v.unwrap();
+    assert_eq!(v.rule_name, "FocusedTestRule");
+    assert_eq!(v.severity, vitest_linter::models::Severity::Error);
+}
+
+#[test]
+fn mnt007_describe_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "describe_only.test.ts",
+        r#"
+import { describe, test, expect } from 'vitest';
+
+describe.only('focused suite', () => {
+    test('inside', () => {
+        expect(1).toBe(1);
+    });
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 violation for describe.only"
+    );
+}
+
+#[test]
+fn mnt007_it_only_detected() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "it_only.test.ts",
+        r#"
+import { it, expect } from 'vitest';
+
+it.only('focused it', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(v.is_some(), "Expected VITEST-MNT-007 violation for it.only");
+}
+
+#[test]
+fn mnt007_no_false_positive_without_only() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "normal.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('normal test', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-007").is_none(),
+        "Should not trigger MNT-007 without .only"
+    );
+}
+
+#[test]
+fn suppression_disable_next_line() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable-next-line VITEST-FLK-001
+test('has timeout', () => {
+    setTimeout(() => {
+        expect(1).toBe(1);
+    }, 1000);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed by disable-next-line comment"
+    );
+}
+
+#[test]
+fn suppression_disable_next_line_all_rules() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "suppressed_all.test.ts",
+        r#"
+import { test } from 'vitest';
+
+// vitest-linter-disable-next-line
+test('no assert', () => {
+    const x = 1;
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_none(),
+        "MNT-001 should be suppressed by disable-next-line with no rule ID"
+    );
+}
+
+#[test]
+fn suppression_disable_range() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "range_suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable VITEST-FLK-001
+test('has timeout', () => {
+    setTimeout(() => {
+        expect(1).toBe(1);
+    }, 1000);
+});
+// vitest-linter-enable VITEST-FLK-001
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed by disable/enable range"
+    );
+}
+
+#[test]
+fn suppression_does_not_affect_other_rules() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "partial_suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable-next-line VITEST-FLK-001
+test('has timeout but no assertions', () => {
+    setTimeout(() => {
+        const x = 1;
+    }, 1000);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed"
+    );
+    // MNT-001 (no assertions) should still fire
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_some(),
+        "VITEST-MNT-001 should fire even when FLK-001 is suppressed"
+    );
+}
+
+#[test]
+fn flk004_fake_timers_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_no_cleanup.test.ts",
+        r#"
+import { test, expect, vi } from 'vitest';
+
+test('uses fake timers', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-FLK-004");
+    assert!(v.is_some(), "Expected VITEST-FLK-004 violation");
+    assert_eq!(v.unwrap().rule_name, "FakeTimersCleanupRule");
+}
+
+#[test]
+fn flk004_fake_timers_with_after_each_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_safe.test.ts",
+        r#"
+import { test, expect, vi, afterEach } from 'vitest';
+
+afterEach(() => {
+    vi.useRealTimers();
+});
+
+test('uses fake timers safely', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-004").is_none(),
+        "Should not trigger FLK-004 when afterEach has vi.useRealTimers()"
+    );
+}
+
+#[test]
+fn flk004_fake_timers_with_use_real_timers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "fake_timers_real.test.ts",
+        r#"
+import { test, expect, vi, afterEach } from 'vitest';
+
+afterEach(() => {
+    vi.useRealTimers();
+});
+
+test('uses fake timers', () => {
+    vi.useFakeTimers();
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-004").is_none(),
+        "Should not trigger FLK-004 when afterEach has vi.useRealTimers()"
+    );
+}
+
+#[test]
+fn mnt008_mock_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "mock_no_cleanup.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+
+vi.mock('./some-module', () => ({ default: {} }));
+
+test('uses mock', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(v.is_some(), "Expected VITEST-MNT-008 violation");
+    assert_eq!(v.unwrap().rule_name, "MissingMockCleanupRule");
+}
+
+#[test]
+fn mnt008_mock_with_cleanup_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "mock_with_cleanup.test.ts",
+        r#"
+import { vi, test, expect, afterEach } from 'vitest';
+
+vi.mock('./some-module', () => ({ default: {} }));
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+test('uses mock safely', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-008").is_none(),
+        "Should not trigger MNT-008 when afterEach has vi.restoreAllMocks()"
+    );
+}
+
+#[test]
+fn mnt008_no_mock_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "no_mock.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('no mocks', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-008").is_none(),
+        "Should not trigger MNT-008 without vi.mock()"
+    );
+}
+
+#[test]
+fn str001_shallow_nesting_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "shallow_nesting.test.ts",
+        r#"
+import { describe, test, expect } from 'vitest';
+
+describe('outer', () => {
+    describe('inner', () => {
+        test('shallow', () => {
+            expect(true).toBe(true);
+        });
+    });
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-STR-001").is_none(),
+        "2-level nesting should NOT trigger STR-001 (threshold is > 3)"
+    );
 }
 
 #[test]
@@ -975,7 +1386,15 @@ test('timeout', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Suggestion:"));
@@ -992,7 +1411,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 
@@ -1008,7 +1427,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
 }
@@ -1083,7 +1510,15 @@ test('no assert', () => { const x = 1; });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        false,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
@@ -1102,7 +1537,15 @@ test('clean', () => { expect(1).toBe(1); });
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    let has_errors = run_cli(&[test_path], "terminal", Some(&output_path), false).unwrap();
+    let has_errors = run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        false,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     assert!(!has_errors);
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("No test smells detected"));
@@ -1228,7 +1671,15 @@ test('has if', () => {
 "#,
     );
     let output_path = dir.path().join("output.txt");
-    run_cli(&[test_path], "terminal", Some(&output_path), true).unwrap();
+    run_cli(
+        &[test_path],
+        "terminal",
+        Some(&output_path),
+        true,
+        false,
+        "HEAD",
+    )
+    .unwrap();
     let output = fs::read_to_string(&output_path).unwrap();
     assert!(output.contains("Found"));
 }
@@ -1244,7 +1695,7 @@ import { test, expect } from 'vitest';
 test('clean', () => { expect(1).toBe(1); });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(!has_errors);
 }
 
@@ -1259,7 +1710,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "terminal", None, true).unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 

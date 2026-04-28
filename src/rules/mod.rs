@@ -1,16 +1,24 @@
 use crate::config::Config;
 use crate::models::{Category, ParsedModule, Severity, Violation};
 
+/// Context passed to each rule during evaluation, including the active
+/// configuration and all modules in the current group.
 pub struct LintContext<'a> {
     pub config: &'a Config,
     pub all_modules: &'a [ParsedModule],
 }
 
+/// Trait implemented by every lint rule.
 pub trait Rule {
+    /// Unique rule identifier (e.g. `VITEST-FLK-001`).
     fn id(&self) -> &'static str;
+    /// Human-readable rule name (e.g. `TimeoutRule`).
     fn name(&self) -> &'static str;
+    /// Default severity level for this rule.
     fn severity(&self) -> Severity;
+    /// Category this rule belongs to.
     fn category(&self) -> Category;
+    /// Evaluate the rule against a parsed module and return any violations.
     fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation>;
 }
 
@@ -24,6 +32,8 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(flakiness::TimeoutRule),
         Box::new(flakiness::DateMockRule),
         Box::new(flakiness::NetworkImportRule),
+        Box::new(flakiness::FakeTimersCleanupRule),
+        Box::new(flakiness::NonDeterministicRule),
         Box::new(maintenance::NoAssertionRule),
         Box::new(maintenance::MultipleExpectRule),
         Box::new(maintenance::ConditionalLogicRule),
@@ -32,6 +42,8 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::NestedDescribeRule),
         Box::new(maintenance::ReturnInTestRule),
         Box::new(maintenance::MissingAwaitAssertionRule),
+        Box::new(maintenance::FocusedTestRule),
+        Box::new(maintenance::MissingMockCleanupRule),
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
@@ -45,7 +57,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 14);
+        assert_eq!(rules.len(), 18);
     }
 
     #[test]
@@ -55,6 +67,8 @@ mod tests {
             "VITEST-FLK-001",
             "VITEST-FLK-002",
             "VITEST-FLK-003",
+            "VITEST-FLK-004",
+            "VITEST-FLK-005",
             "VITEST-MNT-001",
             "VITEST-MNT-002",
             "VITEST-MNT-003",
@@ -63,6 +77,8 @@ mod tests {
             "VITEST-STR-001",
             "VITEST-STR-002",
             "VITEST-MNT-006",
+            "VITEST-MNT-007",
+            "VITEST-MNT-008",
             "VITEST-DEP-001",
             "VITEST-DEP-002",
             "VITEST-DEP-003",
@@ -102,8 +118,8 @@ mod tests {
             .iter()
             .filter(|r| r.category() == Category::Dependencies)
             .collect();
-        assert_eq!(flk.len(), 3);
-        assert_eq!(mnt.len(), 6);
+        assert_eq!(flk.len(), 5);
+        assert_eq!(mnt.len(), 8);
         assert_eq!(str_.len(), 2);
         assert_eq!(dep.len(), 3);
     }
@@ -115,6 +131,8 @@ mod tests {
             ("VITEST-FLK-001", "TimeoutRule"),
             ("VITEST-FLK-002", "DateMockRule"),
             ("VITEST-FLK-003", "NetworkImportRule"),
+            ("VITEST-FLK-004", "FakeTimersCleanupRule"),
+            ("VITEST-FLK-005", "NonDeterministicRule"),
             ("VITEST-MNT-001", "NoAssertionRule"),
             ("VITEST-MNT-002", "MultipleExpectRule"),
             ("VITEST-MNT-003", "ConditionalLogicRule"),
@@ -123,6 +141,8 @@ mod tests {
             ("VITEST-STR-001", "NestedDescribeRule"),
             ("VITEST-STR-002", "ReturnInTestRule"),
             ("VITEST-MNT-006", "MissingAwaitAssertionRule"),
+            ("VITEST-MNT-007", "FocusedTestRule"),
+            ("VITEST-MNT-008", "MissingMockCleanupRule"),
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),

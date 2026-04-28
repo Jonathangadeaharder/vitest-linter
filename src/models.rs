@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+/// Severity level for a lint violation, ordered Error > Warning > Info.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Severity {
     Error,
@@ -9,6 +10,7 @@ pub enum Severity {
     Info,
 }
 
+/// Category grouping for lint rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Category {
     Flakiness,
@@ -17,6 +19,7 @@ pub enum Category {
     Dependencies,
 }
 
+/// A single lint violation found by a rule.
 #[derive(Debug, Clone, Serialize)]
 pub struct Violation {
     pub rule_id: String,
@@ -70,9 +73,21 @@ pub struct TestBlock {
     pub uses_datemock: bool,
     pub has_multiple_expects: bool,
     pub is_skipped: bool,
+    pub is_only: bool,
     pub is_nested: bool,
     pub has_return_statement: bool,
     pub unawaited_async_assertions: usize,
+    pub uses_fake_timers: bool,
+    pub uses_random: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct DescribeBlock {
+    pub name: String,
+    pub file_path: PathBuf,
+    pub line: usize,
+    pub is_only: bool,
+    pub depth: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +98,7 @@ pub struct ParsedModule {
     pub vi_mocks: Vec<ViMockCall>,
     pub hook_calls: Vec<HookCall>,
     pub test_blocks: Vec<TestBlock>,
+    pub describe_blocks: Vec<DescribeBlock>,
     pub has_fake_timers: bool,
 }
 

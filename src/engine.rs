@@ -1,18 +1,23 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::config::Config;
 use crate::models::{ParsedModule, Violation};
 use crate::parser::TsParser;
 use crate::rules::{all_rules, LintContext};
+use crate::suppression::SuppressionMap;
 
+/// Top-level linting engine that coordinates file discovery, parsing, rule
+/// evaluation, and suppression filtering.
 pub struct LintEngine {
     parser: TsParser,
 }
 
 impl LintEngine {
+    /// Create a new engine backed by a tree-sitter TypeScript parser.
     #[allow(clippy::missing_errors_doc)]
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
@@ -20,16 +25,30 @@ impl LintEngine {
         })
     }
 
+    /// Lint all test files discovered under `paths` and return sorted violations.
+    ///
+    /// Files are parsed in parallel via rayon, grouped by their nearest
+    /// `.vitest-linter.toml` config root, and evaluated against the active
+    /// rule set. Suppression comments are respected.
     #[allow(clippy::missing_errors_doc)]
     pub fn lint_paths(&self, paths: &[PathBuf]) -> anyhow::Result<Vec<Violation>> {
         let files = Self::discover_files(paths);
-        let mut modules = Vec::new();
 
-        for file in &files {
-            match self.parser.parse_file(file) {
-                Ok(m) => modules.push(m),
-                Err(e) => eprintln!("Warning: Failed to parse {}: {e}", file.display()),
-            }
+        // Parse files in parallel using rayon
+        let parsed: Vec<_> = files
+            .par_iter()
+            .filter_map(|file| {
+                let source = std::fs::read_to_string(file).ok()?;
+                let module = self.parser.parse_file(file).ok()?;
+                Some((module, source))
+            })
+            .collect();
+
+        let mut modules = Vec::with_capacity(parsed.len());
+        let mut sources = Vec::with_capacity(parsed.len());
+        for (module, source) in parsed {
+            modules.push(module);
+            sources.push(source);
         }
 
         // Group modules by their resolved config root so each module is
@@ -47,6 +66,10 @@ impl LintEngine {
         let rules = all_rules();
         let mut violations = Vec::new();
 
+        // Pre-parse suppression maps once per file (not per rule)
+        let suppressions: Vec<SuppressionMap> =
+            sources.iter().map(|s| SuppressionMap::parse(s)).collect();
+
         for (config, indices) in groups.values() {
             let group_modules: Vec<ParsedModule> =
                 indices.iter().map(|i| modules[*i].clone()).collect();
@@ -55,8 +78,29 @@ impl LintEngine {
                 all_modules: &group_modules,
             };
             for rule in &rules {
-                for module in &group_modules {
+                // Skip disabled rules
+                if config.rules.is_disabled(rule.id()) {
+                    continue;
+                }
+                for (local_idx, module) in group_modules.iter().enumerate() {
+                    let global_idx = indices[local_idx];
                     let mut v = rule.check(module, &ctx);
+                    // Apply severity overrides
+                    if let Some(override_sev) = config.rules.severity_override(rule.id()) {
+                        for violation in &mut v {
+                            violation.severity = match override_sev.to_ascii_lowercase().as_str() {
+                                "error" => crate::models::Severity::Error,
+                                "warning" => crate::models::Severity::Warning,
+                                "info" => crate::models::Severity::Info,
+                                _ => violation.severity,
+                            };
+                        }
+                    }
+                    // Filter suppressed violations
+                    let suppression = &suppressions[global_idx];
+                    v.retain(|violation| {
+                        !suppression.is_suppressed(violation.line, &violation.rule_id)
+                    });
                     violations.append(&mut v);
                 }
             }
@@ -90,30 +134,36 @@ impl LintEngine {
     }
 
     fn discover_files(paths: &[PathBuf]) -> Vec<PathBuf> {
-        let mut files = Vec::new();
-
-        for path in paths {
-            if path.is_file() {
-                let name = path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                if is_test_file(&name) {
-                    files.push(path.clone());
-                }
-            } else if path.is_dir() {
-                for entry in WalkDir::new(path)
-                    .into_iter()
-                    .filter_map(std::result::Result::ok)
-                {
-                    let name = entry.file_name().to_string_lossy().to_string();
+        let candidates: Vec<PathBuf> = paths
+            .par_iter()
+            .flat_map_iter(|path| {
+                if path.is_file() {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
                     if is_test_file(&name) {
-                        files.push(entry.into_path());
+                        vec![path.clone()]
+                    } else {
+                        vec![]
                     }
+                } else if path.is_dir() {
+                    WalkDir::new(path)
+                        .into_iter()
+                        .filter_map(std::result::Result::ok)
+                        .filter(|entry| {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            is_test_file(&name)
+                        })
+                        .map(|entry| entry.into_path())
+                        .collect()
+                } else {
+                    vec![]
                 }
-            }
-        }
+            })
+            .collect();
 
+        let mut files = candidates;
         files.sort();
         files.dedup();
         files

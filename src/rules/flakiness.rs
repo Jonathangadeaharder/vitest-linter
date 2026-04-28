@@ -1,6 +1,8 @@
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
+/// Flags tests that use `setTimeout`/`setInterval` without fake timers,
+/// which can cause timing-dependent flakiness.
 pub struct TimeoutRule;
 
 impl Rule for TimeoutRule {
@@ -40,6 +42,8 @@ impl Rule for TimeoutRule {
     }
 }
 
+/// Flags tests that use `Date` or `Date.now()` without `vi.useFakeTimers()`,
+/// producing non-deterministic results across runs.
 pub struct DateMockRule;
 
 impl Rule for DateMockRule {
@@ -82,6 +86,8 @@ impl Rule for DateMockRule {
     }
 }
 
+/// Flags test files that import network libraries (axios, node-fetch, etc.)
+/// without mocking, making tests susceptible to network failures.
 pub struct NetworkImportRule;
 
 const NETWORK_LIBS: &[&str] = &[
@@ -137,5 +143,104 @@ impl Rule for NetworkImportRule {
             suggestion: Some("Mock network calls using vi.mock() or msw".to_string()),
             test_name: None,
         }]
+    }
+}
+
+/// Flags tests that call `vi.useFakeTimers()` without a corresponding
+/// `afterEach` cleanup, causing timer state to leak between tests.
+pub struct FakeTimersCleanupRule;
+
+const TIMER_CLEANUP_CALLS: &[&str] = &["vi.useRealTimers", "vi.clearAllTimers"];
+
+impl Rule for FakeTimersCleanupRule {
+    fn id(&self) -> &'static str {
+        "VITEST-FLK-004"
+    }
+    fn name(&self) -> &'static str {
+        "FakeTimersCleanupRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Flakiness
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        module
+            .test_blocks
+            .iter()
+            .filter(|tb| tb.uses_fake_timers)
+            .filter(|_tb| {
+                // Check if any afterEach hook with timer cleanup covers this test.
+                // A cleanup hook typically appears before the tests it protects.
+                !module.hook_calls.iter().any(|h| {
+                    h.kind == HookKind::AfterEach
+                        && h.vi_calls
+                            .iter()
+                            .any(|c| TIMER_CLEANUP_CALLS.iter().any(|tc| c == tc))
+                })
+            })
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "Test '{}' calls vi.useFakeTimers() without afterEach cleanup — timers will leak to other tests",
+                    tb.name
+                ),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Add afterEach(() => { vi.useRealTimers() }) or afterEach(() => { vi.clearAllTimers() }) to reset timers"
+                        .to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
+    }
+}
+
+/// Flags tests that use `Math.random()` or `crypto.randomUUID()` without
+/// seeding, producing non-deterministic results.
+pub struct NonDeterministicRule;
+
+impl Rule for NonDeterministicRule {
+    fn id(&self) -> &'static str {
+        "VITEST-FLK-005"
+    }
+    fn name(&self) -> &'static str {
+        "NonDeterministicRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Flakiness
+    }
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+        module
+            .test_blocks
+            .iter()
+            .filter(|tb| tb.uses_random)
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!(
+                    "Test '{}' uses Math.random() or crypto.randomUUID() — results are non-deterministic",
+                    tb.name
+                ),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Mock Math.random() or use a seeded PRNG for deterministic tests".to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
     }
 }
