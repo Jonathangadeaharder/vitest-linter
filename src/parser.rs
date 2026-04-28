@@ -389,12 +389,24 @@ impl TsParser {
 
     fn string_value(node: Node, source: &str) -> Option<String> {
         match node.kind() {
-            "string" | "template_string" => {
+            "string" => {
                 let text = node.utf8_text(source.as_bytes()).unwrap_or("");
                 Some(
                     text.trim_matches(|c| c == '"' || c == '\'' || c == '`')
                         .to_string(),
                 )
+            }
+            "template_string" => {
+                // Reject templates with interpolations (${...}).
+                for i in 0..node.named_child_count() {
+                    if let Some(child) = node.named_child(i) {
+                        if child.kind() == "template_substitution" {
+                            return None;
+                        }
+                    }
+                }
+                let text = node.utf8_text(source.as_bytes()).unwrap_or("");
+                Some(text.trim_matches('`').to_string())
             }
             _ => None,
         }
@@ -919,5 +931,22 @@ vi.mock(import('../infrastructure/database'));
         assert_eq!(module.vi_mocks.len(), 1);
         assert_eq!(module.vi_mocks[0].source, "../infrastructure/database");
         assert_eq!(module.vi_mocks[0].scope, MockScope::Module);
+    }
+
+    #[test]
+    fn parse_vi_mock_template_interpolation_ignored() {
+        let dir = write_temp(
+            r#"
+import { vi } from 'vitest';
+
+vi.mock(`../${name}`);
+"#,
+            "interp.test.ts",
+        );
+        let path = dir.path().join("interp.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.vi_mocks.len(), 0);
     }
 }

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::config::Config;
-use crate::models::Violation;
+use crate::models::{ParsedModule, Violation};
 use crate::parser::TsParser;
 use crate::rules::{all_rules, LintContext};
 
@@ -48,10 +48,11 @@ impl LintEngine {
         let mut violations = Vec::new();
 
         for (config, indices) in groups.values() {
-            let group_modules: Vec<&_> = indices.iter().map(|i| &modules[*i]).collect();
+            let group_modules: Vec<ParsedModule> =
+                indices.iter().map(|i| modules[*i].clone()).collect();
             let ctx = LintContext {
                 config,
-                all_modules: &modules,
+                all_modules: &group_modules,
             };
             for rule in &rules {
                 for module in &group_modules {
