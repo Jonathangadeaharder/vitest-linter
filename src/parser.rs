@@ -203,7 +203,6 @@ impl TsParser {
                         text.starts_with("async")
                     });
 
-
                 ctx.describe_blocks.push(DescribeBlock {
                     name,
                     file_path: path.to_path_buf(),

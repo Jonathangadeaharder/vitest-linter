@@ -4,7 +4,7 @@ A fast, zero-config test-smell linter for TypeScript/JavaScript Vitest test suit
 
 ## Features
 
-- **18 rules** across 4 categories: Flakiness, Maintenance, Structure, Dependencies
+- **49 rules** across 5 categories: Flakiness, Maintenance, Structure, Dependencies, Validation
 - Optional `.vitest-linter.toml` for project-specific banlists (DI rules)
 - Recursive file discovery via [walkdir](https://docs.rs/walkdir)
 - Tree-sitter-powered AST analysis (TypeScript **and** TSX/JSX)
@@ -47,8 +47,10 @@ vitest-linter --incremental --base origin/main
 
 ## Rules
 
-> **18 rules** implemented across 4 categories.  Numeric suffixes are kept in
-> parity with pytest-linter where a 1:1 semantic mapping exists.
+> **49 rules** implemented across 5 categories. Numeric suffixes are kept in
+> parity with pytest-linter where a 1:1 semantic mapping exists. Rules are
+> organized by eslint-plugin-vitest category naming: VAL (Validation), NO
+> (No-*), PREF (Prefer-*), REQ (Require-*), CON (Consistency).
 
 ### Flakiness (VITEST-FLK-*)
 
@@ -90,6 +92,62 @@ infrastructure. Active only when `.vitest-linter.toml` configures a banlist.
 | VITEST-DEP-001 | BannedModuleMockRule | Error | `vi.mock(<path>)` at module scope where path matches a configured banlist (e.g. shared `db`/`eventBus`/`container`). Such mocks leak across test files via the module cache and silently corrupt downstream tests. Refactor the target service to accept dependencies via constructor (DI). |
 | VITEST-DEP-002 | ProductionSingletonImportRule | Error | Unit test imports a configured production singleton. Importing the singleton triggers its constructor side effects (event-handler registration, DB connections) on the production wiring. Construct a fresh instance with fakes; production singletons belong in `*.integration.test.ts` only. |
 | VITEST-DEP-003 | ResetEscapeHatchRule | Warning | `vi.resetModules()` / `vi.restoreAllMocks()` / `vi.unmock()` inside `beforeEach`/`beforeAll`/`afterEach`/`afterAll`. These mask underlying coupling between test files instead of fixing it. |
+
+### Validation (VITEST-VAL-*)
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-VAL-001 | ValidExpectRule | Error | `expect()` call missing `.toBe()` or similar assertion — promise silently swallowed |
+| VITEST-VAL-002 | ValidExpectInPromiseRule | Error | `expect()` inside a `.then()` / `catch()` without `return` — assertion may never run |
+| VITEST-VAL-003 | ValidDescribeCallbackRule | Error | `describe()` with no callback or a non-function callback |
+| VITEST-VAL-004 | ValidTitleRule | Warning | Test/describe title is empty, a duplicate, or not a string literal |
+| VITEST-VAL-005 | NoUnneededAsyncExpectFunctionRule | Warning | Using `expect(await ...)` or `.resolves` with an already-sync matcher |
+
+### No-* (VITEST-NO-*)
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-NO-001 | NoStandaloneExpectRule | Error | `expect()` call outside any `it`/`test` body |
+| VITEST-NO-002 | NoIdenticalTitleRule | Error | Two `it`/`describe` blocks in the same scope share the same title |
+| VITEST-NO-003 | NoCommentedOutTestsRule | Maintenance | Commented-out `it(` / `test(` / `describe(` lines |
+| VITEST-NO-005 | NoTestPrefixesRule | Warning | `test.skip` / `test.only` used instead of `it.skip` / `it.only` |
+| VITEST-NO-006 | NoDuplicateHooksRule | Warning | Multiple `beforeEach` / `afterEach` / etc. in the same `describe` |
+| VITEST-NO-007 | NoImportNodeTestRule | Error | `import ... from 'node:test'` in a Vitest project |
+| VITEST-NO-008 | NoInterpolationInSnapshotsRule | Warning | Template literal with `${}` inside `toMatchSnapshot()` |
+| VITEST-NO-009 | NoLargeSnapshotsRule | Warning | `toMatchSnapshot()` call exceeding a configurable line threshold |
+| VITEST-NO-013 | NoDoneCallbackRule | Warning | `it('...', (done) => {})` — use async/await instead |
+| VITEST-NO-014 | NoConditionalExpectRule | Warning | `expect()` inside `if` / `switch` / ternary — non-deterministic assertion |
+
+### Prefer-* (VITEST-PREF-*)
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-PREF-001 | PreferToBeRule | Warning | Use `.toBe()` for primitive comparisons instead of `.toEqual()` |
+| VITEST-PREF-002 | PreferToContainRule | Warning | Use `.toContain()` instead of asserting on `.includes()` |
+| VITEST-PREF-003 | PreferToHaveLengthRule | Warning | Use `.toHaveLength()` instead of asserting on `.length` |
+| VITEST-PREF-005 | PreferSpyOnRule | Dependencies | Use `vi.spyOn()` instead of assigning `vi.fn()` to an object method |
+| VITEST-PREF-007 | PreferCalledOnceRule | Warning | Use `.toHaveBeenCalledOnce()` instead of `.toHaveBeenCalledTimes(1)` |
+| VITEST-PREF-009 | PreferHooksOnTopRule | Structure | Hooks should be placed above all test cases in a `describe` block |
+| VITEST-PREF-010 | PreferHooksInOrderRule | Structure | Hooks should follow ordering: beforeAll → beforeEach → afterEach → afterAll |
+| VITEST-PREF-012 | PreferTodoRule | Maintenance | Empty test bodies should use `test.todo()` instead |
+| VITEST-PREF-013 | PreferMockPromiseShorthandRule | Warning | Use `.mockResolvedValue()` / `.mockRejectedValue()` instead of `mockReturnValue(Promise.resolve/reject(...))` |
+| VITEST-PREF-014 | PreferExpectResolvesRule | Warning | Use `expect(promise).resolves` instead of `expect(await promise)` |
+
+### Require-* (VITEST-REQ-*)
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-REQ-001 | RequireHookRule | Structure | Setup/teardown logic outside hooks should be moved into `beforeEach`/`afterEach` |
+| VITEST-REQ-002 | RequireTopLevelDescribeRule | Structure | All `it`/`test` blocks should be inside a `describe` block |
+| VITEST-REQ-003 | RequireToThrowMessageRule | Warning | `.toThrow()` / `.rejects.toThrow()` should include an expected error message |
+
+### Consistency (VITEST-CON-*)
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-CON-001 | ConsistentTestItRule | Maintenance | Mix of `test()` and `it()` in the same file — pick one |
+| VITEST-CON-003 | ConsistentVitestViRule | Dependencies | Mix of `vi` named import and `vitest` namespace import |
+| VITEST-CON-004 | HoistedApisOnTopRule | Structure | `vi.mock()` / `vi.hoisted()` calls should precede all `test`/`it`/`describe` blocks |
 
 ## Configuration (`.vitest-linter.toml`)
 
