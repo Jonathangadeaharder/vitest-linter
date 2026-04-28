@@ -7,6 +7,7 @@ use crate::config::Config;
 use crate::models::{ParsedModule, Violation};
 use crate::parser::TsParser;
 use crate::rules::{all_rules, LintContext};
+use crate::suppression::SuppressionMap;
 
 pub struct LintEngine {
     parser: TsParser,
@@ -24,10 +25,15 @@ impl LintEngine {
     pub fn lint_paths(&self, paths: &[PathBuf]) -> anyhow::Result<Vec<Violation>> {
         let files = Self::discover_files(paths);
         let mut modules = Vec::new();
+        let mut sources: Vec<String> = Vec::new();
 
         for file in &files {
             match self.parser.parse_file(file) {
-                Ok(m) => modules.push(m),
+                Ok(m) => {
+                    let source = std::fs::read_to_string(file).unwrap_or_default();
+                    sources.push(source);
+                    modules.push(m);
+                }
                 Err(e) => eprintln!("Warning: Failed to parse {}: {e}", file.display()),
             }
         }
@@ -55,8 +61,14 @@ impl LintEngine {
                 all_modules: &group_modules,
             };
             for rule in &rules {
-                for module in &group_modules {
+                for (local_idx, module) in group_modules.iter().enumerate() {
+                    let global_idx = indices[local_idx];
                     let mut v = rule.check(module, &ctx);
+                    // Filter suppressed violations
+                    let suppression = SuppressionMap::parse(&sources[global_idx]);
+                    v.retain(|violation| {
+                        !suppression.is_suppressed(violation.line, &violation.rule_id)
+                    });
                     violations.append(&mut v);
                 }
             }

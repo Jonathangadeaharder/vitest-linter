@@ -769,6 +769,106 @@ test('normal test', () => {
 }
 
 #[test]
+fn suppression_disable_next_line() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable-next-line VITEST-FLK-001
+test('has timeout', () => {
+    setTimeout(() => {
+        expect(1).toBe(1);
+    }, 1000);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed by disable-next-line comment"
+    );
+}
+
+#[test]
+fn suppression_disable_next_line_all_rules() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "suppressed_all.test.ts",
+        r#"
+import { test } from 'vitest';
+
+// vitest-linter-disable-next-line
+test('no assert', () => {
+    const x = 1;
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_none(),
+        "MNT-001 should be suppressed by disable-next-line with no rule ID"
+    );
+}
+
+#[test]
+fn suppression_disable_range() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "range_suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable VITEST-FLK-001
+test('has timeout', () => {
+    setTimeout(() => {
+        expect(1).toBe(1);
+    }, 1000);
+});
+// vitest-linter-enable VITEST-FLK-001
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed by disable/enable range"
+    );
+}
+
+#[test]
+fn suppression_does_not_affect_other_rules() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "partial_suppressed.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+// vitest-linter-disable-next-line VITEST-FLK-001
+test('has timeout', () => {
+    setTimeout(() => {
+        expect(1).toBe(1);
+    }, 1000);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let violations = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-001").is_none(),
+        "VITEST-FLK-001 should be suppressed"
+    );
+    // Other rules should still fire (though this test case doesn't trigger others)
+}
+
+#[test]
 fn parser_switch_statement_conditional() {
     let dir = TempDir::new().unwrap();
     let path = write_fixture(
