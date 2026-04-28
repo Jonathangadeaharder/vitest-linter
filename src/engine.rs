@@ -83,8 +83,12 @@ impl LintEngine {
 fn is_test_file(name: &str) -> bool {
     name.ends_with(".test.ts")
         || name.ends_with(".spec.ts")
+        || name.ends_with(".test.tsx")
+        || name.ends_with(".spec.tsx")
         || name.ends_with(".test.js")
         || name.ends_with(".spec.js")
+        || name.ends_with(".test.jsx")
+        || name.ends_with(".spec.jsx")
 }
 
 #[cfg(test)]
@@ -95,10 +99,15 @@ mod tests {
     fn test_file_accepted_extensions() {
         assert!(is_test_file("foo.test.ts"));
         assert!(is_test_file("foo.spec.ts"));
+        assert!(is_test_file("foo.test.tsx"));
+        assert!(is_test_file("foo.spec.tsx"));
         assert!(is_test_file("foo.test.js"));
         assert!(is_test_file("foo.spec.js"));
+        assert!(is_test_file("foo.test.jsx"));
+        assert!(is_test_file("foo.spec.jsx"));
         assert!(is_test_file("path/to/bar.test.ts"));
         assert!(is_test_file("path/to/bar.spec.js"));
+        assert!(is_test_file("path/to/baz.test.tsx"));
     }
 
     #[test]
@@ -107,8 +116,6 @@ mod tests {
         assert!(!is_test_file("foo.js"));
         assert!(!is_test_file("foo.tsx"));
         assert!(!is_test_file("foo.jsx"));
-        assert!(!is_test_file("foo.test.tsx"));
-        assert!(!is_test_file("foo.spec.jsx"));
         assert!(!is_test_file("utils.ts"));
         assert!(!is_test_file("README.md"));
         assert!(!is_test_file("foo.test.py"));

@@ -15,7 +15,17 @@ impl TsParser {
     #[allow(clippy::missing_errors_doc)]
     pub fn parse_file(&self, path: &Path) -> anyhow::Result<ParsedModule> {
         let mut parser = Parser::new();
-        parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?;
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let language = if ext == "tsx" || ext == "jsx" {
+            tree_sitter_typescript::LANGUAGE_TSX.into()
+        } else {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+        };
+        parser.set_language(&language)?;
 
         let source = std::fs::read_to_string(path)?;
         let tree = parser
@@ -539,6 +549,30 @@ test('two asserts', () => {
         assert_eq!(module.test_blocks.len(), 1);
         assert_eq!(module.test_blocks[0].assertion_count, 2);
         assert!(module.test_blocks[0].has_multiple_expects);
+    }
+
+    #[test]
+    fn parse_tsx_file_with_jsx() {
+        let dir = write_temp(
+            r#"
+import { render, screen } from '@testing-library/react';
+import { test, expect } from 'vitest';
+import MyComponent from './MyComponent';
+
+test('renders label', () => {
+    render(<MyComponent />);
+    expect(screen.getByText('hello')).toBeTruthy();
+});
+"#,
+            "component.test.tsx",
+        );
+        let path = dir.path().join("component.test.tsx");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.test_blocks.len(), 1);
+        assert_eq!(module.test_blocks[0].name, "renders label");
+        assert!(module.test_blocks[0].has_assertions);
     }
 
     #[test]
