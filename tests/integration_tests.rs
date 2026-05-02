@@ -3358,3 +3358,275 @@ test('no assertions', () => {
         "Should not trigger MNT-009 when no assertions exist (MNT-001 handles that)"
     );
 }
+
+// --- VITEST-DEP-001: Banned Module Mock ---
+#[test]
+fn dep001_banned_mock_path_triggers() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(".vitest-linter.toml"),
+        r#"
+[deps]
+banned_mock_paths = ["**/database"]
+"#,
+    )
+    .unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep001_banned.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+vi.mock('./database', () => ({ db: {} }));
+
+test('works', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-DEP-001");
+    assert!(v.is_some(), "Expected VITEST-DEP-001 for banned mock path");
+    assert!(v.unwrap().message.contains("database"));
+}
+
+#[test]
+fn dep001_non_banned_mock_no_violation() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(".vitest-linter.toml"),
+        r#"
+[deps]
+banned_mock_paths = ["**/database"]
+"#,
+    )
+    .unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep001_ok.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+vi.mock('./utils', () => ({ helper: () => {} }));
+
+test('works', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-DEP-001").is_none(),
+        "Should not trigger DEP-001 for non-banned path"
+    );
+}
+
+// --- VITEST-DEP-002: Production Singleton Import ---
+#[test]
+fn dep002_banned_singleton_import_triggers() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(".vitest-linter.toml"),
+        r#"
+[[deps.banned_singletons]]
+from = "**/db"
+names = ["db"]
+"#,
+    )
+    .unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep002_singleton.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+import { db } from './db';
+
+test('works', () => {
+    expect(db).toBeDefined();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-DEP-002");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-DEP-002 for banned singleton import"
+    );
+    assert!(v.unwrap().message.contains("db"));
+}
+
+#[test]
+fn dep002_integration_test_glob_skips() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join(".vitest-linter.toml"),
+        r#"
+[deps]
+integration_test_glob = "**/*.integration.test.ts"
+
+[[deps.banned_singletons]]
+from = "**/db"
+names = ["db"]
+"#,
+    )
+    .unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep002.integration.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+import { db } from './db';
+
+test('works', () => {
+    expect(db).toBeDefined();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-DEP-002").is_none(),
+        "Should not trigger DEP-002 for integration test files"
+    );
+}
+
+// --- VITEST-DEP-003: Reset Escape Hatch ---
+#[test]
+fn dep003_restore_all_mocks_in_after_each_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep003_escape.test.ts",
+        r#"
+import { afterEach, vi, test, expect } from 'vitest';
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+test('works', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-DEP-003");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-DEP-003 for vi.restoreAllMocks in afterEach"
+    );
+    assert!(v.unwrap().message.contains("vi.restoreAllMocks"));
+}
+
+#[test]
+fn dep003_no_escape_hatch_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "dep003_ok.test.ts",
+        r#"
+import { afterEach, vi, test, expect } from 'vitest';
+
+afterEach(() => {
+    vi.clearAllMocks();
+});
+
+test('works', () => {
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-DEP-003").is_none(),
+        "Should not trigger DEP-003 for vi.clearAllMocks (not an escape hatch)"
+    );
+}
+
+// --- VITEST-FLK-005: Non-Deterministic ---
+#[test]
+fn flk005_math_random_triggers() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "flk005_random.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('random value', () => {
+    const val = Math.random();
+    expect(val).toBeGreaterThanOrEqual(0);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-FLK-005");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-FLK-005 for Math.random() in test"
+    );
+    assert!(v.unwrap().message.contains("Math.random"));
+}
+
+#[test]
+fn flk005_no_random_no_violation() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "flk005_ok.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('deterministic', () => {
+    const val = 42;
+    expect(val).toBe(42);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-FLK-005").is_none(),
+        "Should not trigger FLK-005 without Math.random()"
+    );
+}
+
+// --- VITEST-MNT-010: Implementation Coupled ---
+// NOTE: MNT-010 is currently broken — module.imports contains full import statements
+// (e.g., "import { x } from './mod'"), not just source strings. The rule filters on
+// starts_with("vitest") etc., which never matches because statements start with "import".
+// MNT-010 triggers when a test file imports exactly one production module and test names
+// mirror export names.
+#[test]
+fn mnt010_implementation_coupled_triggers() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("counter.ts"),
+        r#"
+export function add(a: number, b: number): number { return a + b; }
+export function subtract(a: number, b: number): number { return a - b; }
+"#,
+    )
+    .unwrap();
+    let path = write_fixture(
+        &dir,
+        "counter.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+import { add, subtract } from './counter';
+
+test('add', () => { expect(add(1, 2)).toBe(3); });
+test('subtract', () => { expect(subtract(5, 3)).toBe(2); });
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-010").is_some(),
+        "MNT-010 should trigger: single production import, test names match export names"
+    );
+}
