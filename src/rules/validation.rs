@@ -18,7 +18,12 @@ impl Rule for ValidExpectRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -61,7 +66,12 @@ impl Rule for ValidExpectInPromiseRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -106,7 +116,12 @@ impl Rule for ValidDescribeCallbackRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .describe_blocks
             .iter()
@@ -150,7 +165,12 @@ impl Rule for ValidTitleRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut out = Vec::new();
 
         for tb in &module.test_blocks {
@@ -235,7 +255,12 @@ impl Rule for NoUnneededAsyncExpectFunctionRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()

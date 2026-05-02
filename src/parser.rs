@@ -344,9 +344,7 @@ impl TsParser {
                             }
                         }
                     }
-                    "function_declaration"
-                    | "class_declaration"
-                    | "abstract_class_declaration" => {
+                    "function_declaration" | "class_declaration" | "abstract_class_declaration" => {
                         let name = child
                             .child_by_field_name("name")
                             .and_then(|n| n.utf8_text(source.as_bytes()).ok())
@@ -362,10 +360,7 @@ impl TsParser {
                     }
                     "identifier" => {
                         // `export default identifier`
-                        let name = child
-                            .utf8_text(source.as_bytes())
-                            .unwrap_or("")
-                            .to_string();
+                        let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
                         if !name.is_empty() {
                             exports.push(ExportEntry {
                                 name,
@@ -953,12 +948,7 @@ impl TsParser {
         None
     }
 
-    const WEAK_MATCHERS: &[&str] = &[
-        "toBeDefined",
-        "toBeUndefined",
-        "toBeTruthy",
-        "toBeFalsy",
-    ];
+    const WEAK_MATCHERS: &[&str] = &["toBeDefined", "toBeUndefined", "toBeTruthy", "toBeFalsy"];
 
     /// Check if a subtree contains an `expect()` call.
     fn contains_expect_call(node: Node, source: &str) -> bool {
@@ -1466,7 +1456,12 @@ test('mocks', () => {
         let parser = TsParser::new().unwrap();
         let module = parser.parse_file(&path).unwrap();
 
-        assert_eq!(module.vi_mocks.len(), 1, "Expected 1 vi.mock(), got {}", module.vi_mocks.len());
+        assert_eq!(
+            module.vi_mocks.len(),
+            1,
+            "Expected 1 vi.mock(), got {}",
+            module.vi_mocks.len()
+        );
         assert_eq!(module.vi_mocks[0].source, "./my-module2");
         assert_eq!(module.vi_mocks[0].factory_keys, vec!["foo", "nonexistent"]);
     }
@@ -1505,9 +1500,18 @@ export class UserService {}
         let module = parser.parse_file(&path).unwrap();
 
         assert_eq!(module.exports.len(), 3);
-        assert!(module.exports.iter().any(|e| e.name == "calculateTotal" && e.kind == ExportKind::Named));
-        assert!(module.exports.iter().any(|e| e.name == "formatCurrency" && e.kind == ExportKind::Named));
-        assert!(module.exports.iter().any(|e| e.name == "UserService" && e.kind == ExportKind::Named));
+        assert!(module
+            .exports
+            .iter()
+            .any(|e| e.name == "calculateTotal" && e.kind == ExportKind::Named));
+        assert!(module
+            .exports
+            .iter()
+            .any(|e| e.name == "formatCurrency" && e.kind == ExportKind::Named));
+        assert!(module
+            .exports
+            .iter()
+            .any(|e| e.name == "UserService" && e.kind == ExportKind::Named));
     }
 
     #[test]
@@ -1579,7 +1583,10 @@ test('not toThrow', () => {
         eprintln!("test_blocks.len()={}", module.test_blocks.len());
         eprintln!("assertion_count={}", tb.assertion_count);
         eprintln!("weak_assertion_count={}", tb.weak_assertion_count);
-        eprintln!("has_expect_call_without_assertion={}", tb.has_expect_call_without_assertion);
+        eprintln!(
+            "has_expect_call_without_assertion={}",
+            tb.has_expect_call_without_assertion
+        );
 
         assert_eq!(module.test_blocks.len(), 1);
         assert!(

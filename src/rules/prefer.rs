@@ -20,7 +20,12 @@ impl Rule for PreferToBeRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -89,7 +94,12 @@ impl Rule for PreferToContainRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -136,7 +146,12 @@ impl Rule for PreferToHaveLengthRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -190,7 +205,12 @@ impl Rule for PreferSpyOnRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -243,7 +263,12 @@ impl Rule for PreferCalledOnceRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -294,7 +319,12 @@ impl Rule for PreferHooksOnTopRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut violations = Vec::new();
 
         if module.test_blocks.is_empty() || module.hook_calls.is_empty() {
@@ -360,7 +390,12 @@ impl Rule for PreferHooksInOrderRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut violations = Vec::new();
 
         if module.hook_calls.len() < 2 {
@@ -423,7 +458,12 @@ impl Rule for PreferTodoRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -514,7 +554,12 @@ impl Rule for PreferMockPromiseShorthandRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -578,7 +623,12 @@ impl Rule for PreferExpectResolvesRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };

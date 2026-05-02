@@ -18,7 +18,12 @@ impl Rule for TimeoutRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -59,7 +64,12 @@ impl Rule for DateMockRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         if module.has_fake_timers {
             return vec![];
         }
@@ -113,7 +123,12 @@ impl Rule for NetworkImportRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut found = false;
         for imp in &module.imports {
             for lib in NETWORK_LIBS {
@@ -134,9 +149,8 @@ impl Rule for NetworkImportRule {
             rule_name: self.name().to_string(),
             severity: self.severity(),
             category: self.category(),
-            message:
-                "Test file imports network libraries — tests may fail due to network issues"
-                    .to_string(),
+            message: "Test file imports network libraries — tests may fail due to network issues"
+                .to_string(),
             file_path: module.file_path.clone(),
             line: 1,
             col: None,
@@ -165,7 +179,12 @@ impl Rule for FakeTimersCleanupRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -223,7 +242,12 @@ impl Rule for NonDeterministicRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()

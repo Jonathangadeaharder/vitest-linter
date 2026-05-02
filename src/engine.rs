@@ -70,7 +70,10 @@ impl LintEngine {
     /// 1. Parallel parse test files + source modules, build ModuleGraph
     /// 2. Parallel rule evaluation per-file with shared ModuleGraph
     #[allow(clippy::missing_errors_doc)]
-    pub fn lint_paths(&self, paths: &[PathBuf]) -> anyhow::Result<(Vec<Violation>, Vec<Diagnostic>)> {
+    pub fn lint_paths(
+        &self,
+        paths: &[PathBuf],
+    ) -> anyhow::Result<(Vec<Violation>, Vec<Diagnostic>)> {
         let files = Self::discover_files(paths);
 
         // Phase 1: Parse test files in parallel

@@ -16,7 +16,12 @@ impl Rule for ConsistentTestItRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -78,7 +83,12 @@ impl Rule for ConsistentVitestViRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -145,7 +155,12 @@ impl Rule for HoistedApisOnTopRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let first_test_line = module.test_blocks.iter().map(|t| t.line).min();
 
         let first_describe_line = module.describe_blocks.iter().map(|d| d.line).min();

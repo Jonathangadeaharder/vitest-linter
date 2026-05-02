@@ -30,7 +30,12 @@ pub trait Rule {
     /// Category this rule belongs to.
     fn category(&self) -> Category;
     /// Evaluate the rule against a parsed module and return any violations.
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>, graph: &ModuleGraph) -> Vec<Violation>;
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        graph: &ModuleGraph,
+    ) -> Vec<Violation>;
 }
 
 pub mod consistency;

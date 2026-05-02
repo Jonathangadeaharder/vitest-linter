@@ -84,12 +84,7 @@ pub fn run_cli(
             None => Box::new(std::io::stdout()),
         };
         for diag in &diagnostics {
-            writeln!(
-                out,
-                "{}: {}",
-                "Info".blue().bold(),
-                diag.message
-            )?;
+            writeln!(out, "{}: {}", "Info".blue().bold(), diag.message)?;
         }
     }
 

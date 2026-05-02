@@ -16,7 +16,12 @@ impl Rule for RequireHookRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let first_top_level = module
             .vi_mocks
             .iter()
@@ -60,7 +65,12 @@ impl Rule for RequireTopLevelDescribeRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         if module.describe_blocks.is_empty() {
             return vec![];
         }
@@ -166,7 +176,12 @@ impl Rule for RequireToThrowMessageRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -423,8 +438,8 @@ describe('grouped', () => {
                     uses_fit_or_xit: false,
                     has_done_callback: false,
                     has_conditional_expect: false,
-            weak_assertion_count: 0,
-            has_real_timers_call: false,
+                    weak_assertion_count: 0,
+                    has_real_timers_call: false,
                 },
                 TestBlock {
                     name: "inside describe".to_string(),
@@ -451,8 +466,8 @@ describe('grouped', () => {
                     uses_fit_or_xit: false,
                     has_done_callback: false,
                     has_conditional_expect: false,
-            weak_assertion_count: 0,
-            has_real_timers_call: false,
+                    weak_assertion_count: 0,
+                    has_real_timers_call: false,
                 },
             ],
             describe_blocks: vec![DescribeBlock {
@@ -509,8 +524,8 @@ describe('grouped', () => {
                 uses_fit_or_xit: false,
                 has_done_callback: false,
                 has_conditional_expect: false,
-            weak_assertion_count: 0,
-            has_real_timers_call: false,
+                weak_assertion_count: 0,
+                has_real_timers_call: false,
             }],
             vec![],
             vec![],
@@ -550,8 +565,8 @@ describe('grouped', () => {
                 uses_fit_or_xit: false,
                 has_done_callback: false,
                 has_conditional_expect: false,
-            weak_assertion_count: 0,
-            has_real_timers_call: false,
+                weak_assertion_count: 0,
+                has_real_timers_call: false,
             }],
             vec![DescribeBlock {
                 name: "group".to_string(),

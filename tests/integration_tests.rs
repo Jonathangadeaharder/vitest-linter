@@ -3176,7 +3176,10 @@ test('mocks', () => {
     let engine = LintEngine::new().unwrap();
     let (violations, _diagnostics) = engine.lint_paths(&[test_path, source_path]).unwrap();
     let v = find_violation(&violations, "VITEST-DEP-004");
-    assert!(v.is_some(), "Expected VITEST-DEP-004 for extra factory key 'nonexistent'");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-DEP-004 for extra factory key 'nonexistent'"
+    );
 }
 
 #[test]
@@ -3236,7 +3239,10 @@ test('all weak', () => {
     let engine = LintEngine::new().unwrap();
     let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-MNT-009");
-    assert!(v.is_some(), "Expected VITEST-MNT-009 for all weak assertions");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-009 for all weak assertions"
+    );
     assert_eq!(v.unwrap().rule_name, "WeakAssertionRule");
 }
 
@@ -3258,7 +3264,10 @@ test('truthy falsy', () => {
     let engine = LintEngine::new().unwrap();
     let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-MNT-009");
-    assert!(v.is_some(), "Expected VITEST-MNT-009 for toBeTruthy/toBeFalsy");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-009 for toBeTruthy/toBeFalsy"
+    );
 }
 
 #[test]

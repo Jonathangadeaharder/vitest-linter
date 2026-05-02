@@ -18,7 +18,12 @@ impl Rule for NoAssertionRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -59,7 +64,12 @@ impl Rule for MultipleExpectRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -103,7 +113,12 @@ impl Rule for ConditionalLogicRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -145,7 +160,12 @@ impl Rule for TryCatchRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -186,7 +206,12 @@ impl Rule for EmptyTestRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -228,7 +253,12 @@ impl Rule for NestedDescribeRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -270,7 +300,12 @@ impl Rule for ReturnInTestRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -311,7 +346,12 @@ impl Rule for MissingAwaitAssertionRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -354,7 +394,12 @@ impl Rule for FocusedTestRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut out = Vec::new();
 
         for tb in &module.test_blocks {
@@ -424,7 +469,12 @@ impl Rule for MissingMockCleanupRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         if module.vi_mocks.is_empty() {
             return vec![];
         }
@@ -485,7 +535,12 @@ impl Rule for WeakAssertionRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -531,7 +586,12 @@ impl Rule for ImplementationCoupledRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         // Only flag files that import exactly one production module.
         let prod_imports: Vec<&str> = module
             .imports
@@ -645,7 +705,11 @@ mod tests {
         let mut module = empty_module();
         module.imports = vec!["vitest".into(), "@testing-library/react".into()];
         let rule = ImplementationCoupledRule;
-        let violations = rule.check(&module, &crate::rules::LintContext::default(), &ModuleGraph::new(&[], &[]));
+        let violations = rule.check(
+            &module,
+            &crate::rules::LintContext::default(),
+            &ModuleGraph::new(&[], &[]),
+        );
         assert!(violations.is_empty());
     }
 
@@ -654,7 +718,11 @@ mod tests {
         let mut module = empty_module();
         module.imports = vec!["vitest".into(), "lodash".into(), "axios".into()];
         let rule = ImplementationCoupledRule;
-        let violations = rule.check(&module, &crate::rules::LintContext::default(), &ModuleGraph::new(&[], &[]));
+        let violations = rule.check(
+            &module,
+            &crate::rules::LintContext::default(),
+            &ModuleGraph::new(&[], &[]),
+        );
         assert!(violations.is_empty());
     }
 }

@@ -17,7 +17,12 @@ impl Rule for BannedModuleMockRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let banned = &ctx.config.deps.banned_mock_paths;
         if banned.is_empty() {
             return vec![];
@@ -63,7 +68,12 @@ impl Rule for ProductionSingletonImportRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let banned = &ctx.config.deps.banned_singletons;
         if banned.is_empty() {
             return vec![];
@@ -157,7 +167,12 @@ impl Rule for ResetEscapeHatchRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut out = Vec::new();
         for hook in &module.hook_calls {
             for call in &hook.vi_calls {
@@ -202,7 +217,12 @@ impl Rule for MockExportValidationRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>, graph: &ModuleGraph) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut violations = Vec::new();
 
         for mock in &module.vi_mocks {
@@ -222,8 +242,7 @@ impl Rule for MockExportValidationRule {
                             let base = parent.join(&resolved);
                             let exts = ["ts", "tsx", "js", "jsx"];
                             for ext in &exts {
-                                let candidate =
-                                    base.with_extension(ext);
+                                let candidate = base.with_extension(ext);
                                 if let Some(m) = graph.get_module(&candidate) {
                                     return Some(m);
                                 }
