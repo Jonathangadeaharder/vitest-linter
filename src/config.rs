@@ -176,10 +176,112 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// Resolve a module import path to an absolute path.
+    /// Returns the path as-is if it cannot be resolved.
+    #[must_use]
+    pub fn resolve_module_path(&self, import_path: &str) -> String {
+        // For now, return as-is
+        // TODO: Add tsconfig path resolution
+        import_path.to_string()
+    }
+}
+
 fn compile_glob(pat: &str) -> Result<GlobMatcher> {
     Ok(Glob::new(pat)
         .with_context(|| format!("compiling glob `{pat}`"))?
         .compile_matcher())
+}
+
+/// Parsed TypeScript configuration for path alias resolution.
+#[derive(Debug)]
+pub struct TsConfig {
+    base_url: PathBuf,
+    /// (glob_matcher, targets, alias_prefix) — alias_prefix is the part before `/*`
+    paths: Vec<(GlobMatcher, Vec<String>, String)>,
+}
+
+impl TsConfig {
+    /// Load `tsconfig.json` from the given project root directory.
+    #[must_use]
+    pub fn load_from(project_root: &Path) -> Option<Self> {
+        let tsconfig_path = project_root.join("tsconfig.json");
+        let text = std::fs::read_to_string(&tsconfig_path).ok()?;
+        let raw: serde_json::Value = serde_json::from_str(&text).ok()?;
+
+        let compiler_options = raw.get("compilerOptions")?;
+        let base_url = compiler_options
+            .get("baseUrl")
+            .and_then(|v| v.as_str())
+            .map(|b| project_root.join(b))
+            .unwrap_or_else(|| project_root.to_path_buf());
+
+        let mut paths = Vec::new();
+        if let Some(paths_obj) = compiler_options.get("paths").and_then(|v| v.as_object()) {
+            for (alias, targets) in paths_obj {
+                if let Some(arr) = targets.as_array() {
+                    let target_strs: Vec<String> = arr
+                        .iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
+                    // Convert TypeScript path pattern to glob: @/* → @/**
+                    let glob_pattern = alias.replace("/*", "/**");
+                    if let Ok(glob) = Glob::new(&glob_pattern).map(|g| g.compile_matcher()) {
+                        // Store the alias prefix (part before /*) for substitution
+                        let alias_prefix = alias.strip_suffix("/*").unwrap_or(alias).to_string();
+                        paths.push((glob, target_strs, alias_prefix));
+                    }
+                }
+            }
+        }
+
+        Some(Self { base_url, paths })
+    }
+
+    /// Resolve an import path using the tsconfig path aliases.
+    #[must_use]
+    pub fn resolve(&self, import_path: &str, _from_dir: &Path) -> Option<PathBuf> {
+        for (matcher, targets, alias_prefix) in &self.paths {
+            if matcher.is_match(import_path) {
+                // Extract the matched portion by stripping the alias prefix
+                let matched_part = import_path
+                    .strip_prefix(alias_prefix)
+                    .and_then(|s| s.strip_prefix('/'))
+                    .unwrap_or(import_path);
+                for target in targets {
+                    // Substitute the matched portion into the target pattern
+                    let resolved = if let Some(target_prefix) = target.strip_suffix("/*") {
+                        format!("{}/{}", target_prefix, matched_part)
+                    } else {
+                        target.clone()
+                    };
+                    let full_path = self.base_url.join(&resolved);
+                    if let Some(found) = try_with_extensions(&full_path) {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+fn try_with_extensions(path: &Path) -> Option<PathBuf> {
+    let exts = [".ts", ".tsx", ".js", ".jsx"];
+    for ext in &exts {
+        let with_ext = path.with_extension(ext.strip_prefix('.').unwrap());
+        if with_ext.is_file() {
+            return Some(with_ext);
+        }
+    }
+    let index_names = ["index.ts", "index.tsx", "index.js", "index.jsx"];
+    for name in &index_names {
+        let idx = path.join(name);
+        if idx.is_file() {
+            return Some(idx);
+        }
+    }
+    None
 }
 
 fn find_config(start: &Path) -> Option<PathBuf> {
@@ -313,5 +415,55 @@ names = ["orchestrator"]
         std::fs::write(&cfg_path, "").unwrap();
         let found = find_config(&nested).unwrap();
         assert_eq!(found, cfg_path);
+    }
+
+    #[test]
+    fn tsconfig_resolves_paths_alias() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let tsconfig = r#"{
+            "compilerOptions": {
+                "baseUrl": ".",
+                "paths": {
+                    "@/*": ["src/*"],
+                    "@utils/*": ["lib/utils/*"]
+                }
+            }
+        }"#;
+        std::fs::write(dir.path().join("tsconfig.json"), tsconfig).unwrap();
+
+        let button_dir = dir.path().join("src/components");
+        std::fs::create_dir_all(&button_dir).unwrap();
+        std::fs::write(button_dir.join("Button.ts"), "export default {};").unwrap();
+
+        let ts = TsConfig::load_from(dir.path()).unwrap();
+        let resolved = ts.resolve("@/components/Button", dir.path());
+        assert!(resolved.is_some());
+        let resolved = resolved.unwrap();
+        assert!(resolved.ends_with("src/components/Button.ts"));
+    }
+
+    #[test]
+    fn tsconfig_returns_none_for_unmatched_alias() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let tsconfig = r#"{
+            "compilerOptions": {
+                "baseUrl": ".",
+                "paths": {
+                    "@/*": ["src/*"]
+                }
+            }
+        }"#;
+        std::fs::write(dir.path().join("tsconfig.json"), tsconfig).unwrap();
+
+        let ts = TsConfig::load_from(dir.path()).unwrap();
+        let resolved = ts.resolve("lodash", dir.path());
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn tsconfig_returns_none_when_missing() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let ts = TsConfig::load_from(dir.path());
+        assert!(ts.is_none());
     }
 }

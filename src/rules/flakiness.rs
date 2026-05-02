@@ -1,4 +1,4 @@
-use crate::models::{Category, HookKind, ParsedModule, Severity, Violation};
+use crate::models::{Category, HookKind, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 /// Flags tests that use `setTimeout`/`setInterval` without fake timers,
@@ -18,7 +18,12 @@ impl Rule for TimeoutRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -59,7 +64,12 @@ impl Rule for DateMockRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         if module.has_fake_timers {
             return vec![];
         }
@@ -113,7 +123,12 @@ impl Rule for NetworkImportRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut found = false;
         for imp in &module.imports {
             for lib in NETWORK_LIBS {
@@ -134,9 +149,8 @@ impl Rule for NetworkImportRule {
             rule_name: self.name().to_string(),
             severity: self.severity(),
             category: self.category(),
-            message:
-                "Test file imports network libraries \u{2014} tests may fail due to network issues"
-                    .to_string(),
+            message: "Test file imports network libraries — tests may fail due to network issues"
+                .to_string(),
             file_path: module.file_path.clone(),
             line: 1,
             col: None,
@@ -165,12 +179,21 @@ impl Rule for FakeTimersCleanupRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
             .filter(|tb| tb.uses_fake_timers)
-            .filter(|_tb| {
+            .filter(|tb| {
+                // Skip if the test itself calls vi.useRealTimers() to clean up.
+                if tb.has_real_timers_call {
+                    return false;
+                }
                 // Check if any afterEach hook with timer cleanup covers this test.
                 // A cleanup hook typically appears before the tests it protects.
                 !module.hook_calls.iter().any(|h| {
@@ -219,7 +242,12 @@ impl Rule for NonDeterministicRule {
     fn category(&self) -> Category {
         Category::Flakiness
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         module
             .test_blocks
             .iter()

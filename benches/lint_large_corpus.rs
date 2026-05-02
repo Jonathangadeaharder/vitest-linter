@@ -5,6 +5,9 @@
 //! length scaling with the configured number of generated test blocks. All
 //! files are written to a temporary directory so the benchmark is
 //! self-contained and reproducible.
+//!
+//! Source module fixtures are included to exercise cross-AST analysis features
+//! (ModuleGraph building, export parsing, mock export validation, etc.).
 
 use std::path::PathBuf;
 
@@ -21,6 +24,8 @@ fn generate_test_file(n_tests: usize) -> String {
         r#"import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
 import { db } from '../infrastructure/database';
+import { UserService } from '../services/user-service';
+import { formatCurrency, validateEmail } from '../utils/helpers';
 
 vi.mock('../infrastructure/database', () => ({ db: {} }));
 vi.mock('../infrastructure/event-bus', () => ({ emit: vi.fn() }));
@@ -39,7 +44,7 @@ afterEach(() => {
 
     for i in 0..n_tests {
         // Mix of passing and smell-containing tests so rules fire occasionally.
-        match i % 5 {
+        match i % 7 {
             0 => buf.push_str(&format!(
                 r#"it('test_{i}_clean', () => {{
   expect({i} + 1).toBe({});
@@ -74,6 +79,21 @@ afterEach(() => {
 
 "#
             )),
+            4 => buf.push_str(&format!(
+                r#"it('test_{i}_userService', () => {{
+  const user = UserService.getById({i});
+  expect(user).toBeDefined();
+}});
+
+"#
+            )),
+            5 => buf.push_str(&format!(
+                r#"it('test_{i}_formatCurrency', () => {{
+  expect(formatCurrency({i})).toBe('${i}.00');
+}});
+
+"#
+            )),
             _ => buf.push_str(&format!(
                 r#"it('test_{i}_cond', () => {{
   if ({i} > 0) {{
@@ -89,10 +109,50 @@ afterEach(() => {
     buf
 }
 
+/// Produces a source module file exporting named items.
+fn generate_source_module(name: &str, exports: &[&str]) -> String {
+    let mut buf = String::new();
+    for export in exports {
+        buf.push_str(&format!("export function {export}() {{ return null; }}\n"));
+    }
+    buf.push_str(&format!("export default {{ {} }};\n", exports.join(", ")));
+    buf
+}
+
 /// Write `n_files` test files into `dir`, each containing `tests_per_file` tests.
-/// Also writes a `.vitest-linter.toml` config that activates DEP rules.
+/// Also writes source module fixtures for cross-AST analysis and a `.vitest-linter.toml` config.
 fn write_corpus(dir: &TempDir, n_files: usize, tests_per_file: usize) -> Vec<PathBuf> {
     let content = generate_test_file(tests_per_file);
+
+    // Write source module fixtures to exercise cross-AST analysis.
+    let infra_dir = dir.path().join("infrastructure");
+    let services_dir = dir.path().join("services");
+    let utils_dir = dir.path().join("utils");
+    std::fs::create_dir_all(&infra_dir).expect("mkdir infrastructure");
+    std::fs::create_dir_all(&services_dir).expect("mkdir services");
+    std::fs::create_dir_all(&utils_dir).expect("mkdir utils");
+
+    std::fs::write(
+        infra_dir.join("database.ts"),
+        generate_source_module("database", &["db", "connect", "disconnect"]),
+    )
+    .expect("write database.ts");
+    std::fs::write(
+        infra_dir.join("event-bus.ts"),
+        generate_source_module("event-bus", &["emit", "on", "off"]),
+    )
+    .expect("write event-bus.ts");
+    std::fs::write(
+        services_dir.join("user-service.ts"),
+        generate_source_module("user-service", &["UserService"]),
+    )
+    .expect("write user-service.ts");
+    std::fs::write(
+        utils_dir.join("helpers.ts"),
+        generate_source_module("helpers", &["formatCurrency", "validateEmail", "parseDate"]),
+    )
+    .expect("write helpers.ts");
+
     // Write config that enables dependency rules.
     let config = r#"[deps]
 banned_mock_paths = [

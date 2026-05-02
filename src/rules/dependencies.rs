@@ -1,5 +1,5 @@
 use crate::config::matches_path;
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::{LintContext, Rule};
 
 pub struct BannedModuleMockRule;
@@ -17,7 +17,12 @@ impl Rule for BannedModuleMockRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let banned = &ctx.config.deps.banned_mock_paths;
         if banned.is_empty() {
             return vec![];
@@ -63,7 +68,12 @@ impl Rule for ProductionSingletonImportRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let banned = &ctx.config.deps.banned_singletons;
         if banned.is_empty() {
             return vec![];
@@ -157,7 +167,12 @@ impl Rule for ResetEscapeHatchRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &LintContext<'_>) -> Vec<Violation> {
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let mut out = Vec::new();
         for hook in &module.hook_calls {
             for call in &hook.vi_calls {
@@ -187,6 +202,93 @@ impl Rule for ResetEscapeHatchRule {
     }
 }
 
+pub struct MockExportValidationRule;
+
+impl Rule for MockExportValidationRule {
+    fn id(&self) -> &'static str {
+        "VITEST-DEP-004"
+    }
+    fn name(&self) -> &'static str {
+        "MockExportValidationRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Dependencies
+    }
+    fn check(
+        &self,
+        module: &ParsedModule,
+        ctx: &LintContext<'_>,
+        graph: &ModuleGraph,
+    ) -> Vec<Violation> {
+        let mut violations = Vec::new();
+
+        for mock in &module.vi_mocks {
+            // Skip if no factory function
+            if mock.factory_keys.is_empty() {
+                continue;
+            }
+
+            // Try to resolve the mock source to a source module in the graph
+            let resolved = ctx.config.resolve_module_path(&mock.source);
+            let source_module = graph
+                .get_module(std::path::Path::new(&resolved))
+                .or_else(|| {
+                    // Try resolving relative imports by checking extensions
+                    if resolved.starts_with('.') {
+                        if let Some(parent) = module.file_path.parent() {
+                            let base = parent.join(&resolved);
+                            let exts = ["ts", "tsx", "js", "jsx"];
+                            for ext in &exts {
+                                let candidate = base.with_extension(ext);
+                                if let Some(m) = graph.get_module(&candidate) {
+                                    return Some(m);
+                                }
+                            }
+                        }
+                    }
+                    None
+                });
+
+            if let Some(source_module) = source_module {
+                let export_names: Vec<String> = source_module
+                    .exports
+                    .iter()
+                    .map(|e| e.name.clone())
+                    .collect();
+
+                // Check if factory keys match exports
+                for key in &mock.factory_keys {
+                    if !export_names.contains(key) && key != "__esModule" {
+                        violations.push(Violation {
+                            rule_id: self.id().to_string(),
+                            rule_name: self.name().to_string(),
+                            severity: self.severity(),
+                            category: self.category(),
+                            message: format!(
+                                "vi.mock('{}') factory returns '{}' which is not exported by the source module",
+                                mock.source, key
+                            ),
+                            file_path: module.file_path.clone(),
+                            line: mock.line,
+                            col: None,
+                            suggestion: Some(
+                                "Remove the non-existent export from the mock factory or add it to the source module"
+                                    .to_string(),
+                            ),
+                            test_name: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        violations
+    }
+}
+
 fn strip_relative(s: &str) -> &str {
     let mut s = s.trim_start_matches("./");
     while let Some(rest) = s.strip_prefix("../") {
@@ -199,6 +301,7 @@ fn strip_relative(s: &str) -> &str {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::models::ModuleGraph;
     use crate::parser::TsParser;
     use std::path::PathBuf;
 
@@ -234,7 +337,7 @@ banned_mock_paths = ["**/infrastructure/database"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = BannedModuleMockRule.check(&module, &ctx);
+        let v = BannedModuleMockRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-DEP-001");
     }
@@ -256,7 +359,7 @@ banned_mock_paths = ["**/infrastructure/database"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = BannedModuleMockRule.check(&module, &ctx);
+        let v = BannedModuleMockRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -274,7 +377,7 @@ vi.mock('../infrastructure/database');
             config: &cfg,
             all_modules: &[],
         };
-        let v = BannedModuleMockRule.check(&module, &ctx);
+        let v = BannedModuleMockRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -295,7 +398,7 @@ names = ["progressPersistence"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = ProductionSingletonImportRule.check(&module, &ctx);
+        let v = ProductionSingletonImportRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-DEP-002");
     }
@@ -317,7 +420,7 @@ names = ["progressPersistence"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = ProductionSingletonImportRule.check(&module, &ctx);
+        let v = ProductionSingletonImportRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -338,7 +441,7 @@ names = ["progressPersistence"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = ProductionSingletonImportRule.check(&module, &ctx);
+        let v = ProductionSingletonImportRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -359,7 +462,7 @@ names = ["db"]
             config: &cfg,
             all_modules: &[],
         };
-        let v = ProductionSingletonImportRule.check(&module, &ctx);
+        let v = ProductionSingletonImportRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-DEP-002");
     }
@@ -381,7 +484,7 @@ beforeEach(() => {
             config: &cfg,
             all_modules: &[],
         };
-        let v = ResetEscapeHatchRule.check(&module, &ctx);
+        let v = ResetEscapeHatchRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 2);
         assert!(v.iter().all(|x| x.rule_id == "VITEST-DEP-003"));
     }
@@ -400,7 +503,7 @@ beforeEach(() => { vi.clearAllMocks(); });
             config: &cfg,
             all_modules: &[],
         };
-        let v = ResetEscapeHatchRule.check(&module, &ctx);
+        let v = ResetEscapeHatchRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 }

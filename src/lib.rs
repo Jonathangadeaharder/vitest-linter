@@ -75,7 +75,7 @@ pub fn run_cli(
     };
 
     let engine = LintEngine::new()?;
-    let violations = engine.lint_paths(&effective_paths)?;
+    let (violations, diagnostics) = engine.lint_paths(&effective_paths)?;
 
     if format == "json" {
         let json = serde_json::to_string_pretty(&violations)?;
@@ -95,6 +95,10 @@ pub fn run_cli(
             Some(path) => Box::new(fs::File::create(path)?),
             None => Box::new(std::io::stdout()),
         };
+
+        for diag in &diagnostics {
+            writeln!(out, "{}: {}", "Info".blue().bold(), diag.message)?;
+        }
 
         if violations.is_empty() {
             writeln!(out, "{} No test smells detected.", "\u{2713}".green())?;
