@@ -3,8 +3,8 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 use crate::models::{
-    DescribeBlock, ExpectOutsideTest, HookCall, HookKind, ImportEntry, MockScope, ParsedModule,
-    SnapshotSize, TestBlock, ViMockCall,
+    DescribeBlock, ExpectOutsideTest, ExportEntry, ExportKind, HookCall, HookKind, ImportEntry,
+    MockScope, ParsedModule, SnapshotSize, TestBlock, ViMockCall,
 };
 
 /// Tree-sitter-based TypeScript/TSX parser that extracts test metadata from
@@ -60,6 +60,9 @@ impl TsParser {
 
         let has_fake_timers = source.contains("useFakeTimers");
 
+        let mut exports = Vec::new();
+        Self::collect_exports(root, &source, &mut exports);
+
         Ok(ParsedModule {
             file_path: path.to_path_buf(),
             imports: ctx.imports,
@@ -72,6 +75,7 @@ impl TsParser {
             expects_outside_tests: ctx.expects_outside_tests,
             imports_node_test: ctx.imports_node_test,
             snapshot_sizes: ctx.snapshot_sizes,
+            exports,
         })
     }
 
@@ -261,6 +265,121 @@ impl TsParser {
         }
     }
 
+    fn collect_exports(node: Node, source: &str, exports: &mut Vec<ExportEntry>) {
+        if node.kind() != "export_statement" {
+            for i in 0..node.named_child_count() {
+                if let Some(child) = node.named_child(i) {
+                    Self::collect_exports(child, source, exports);
+                }
+            }
+            return;
+        }
+
+        let line = node.start_position().row + 1;
+        let text = node.utf8_text(source.as_bytes()).unwrap_or("");
+
+        // Check for `export default`
+        if text.starts_with("export default") {
+            exports.push(ExportEntry {
+                name: "default".to_string(),
+                kind: ExportKind::Default,
+                line,
+            });
+            return;
+        }
+
+        // Check for `export * from`
+        if text.starts_with("export *") {
+            exports.push(ExportEntry {
+                name: "*".to_string(),
+                kind: ExportKind::Namespace,
+                line,
+            });
+            return;
+        }
+
+        // Check for `export { a, b }` (re-exports or named exports)
+        for i in 0..node.named_child_count() {
+            if let Some(child) = node.named_child(i) {
+                match child.kind() {
+                    "export_clause" => {
+                        for j in 0..child.named_child_count() {
+                            if let Some(spec) = child.named_child(j) {
+                                if spec.kind() == "export_specifier" {
+                                    let name = spec
+                                        .child_by_field_name("name")
+                                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    if !name.is_empty() {
+                                        exports.push(ExportEntry {
+                                            name,
+                                            kind: ExportKind::Named,
+                                            line,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "lexical_declaration" | "variable_declaration" => {
+                        // `export const x = ...` or `export let x = ...`
+                        for j in 0..child.named_child_count() {
+                            if let Some(decl) = child.named_child(j) {
+                                if decl.kind() == "variable_declarator" {
+                                    if let Some(name_node) = decl.child_by_field_name("name") {
+                                        let name = name_node
+                                            .utf8_text(source.as_bytes())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        if !name.is_empty() {
+                                            exports.push(ExportEntry {
+                                                name,
+                                                kind: ExportKind::Named,
+                                                line,
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "function_declaration"
+                    | "class_declaration"
+                    | "abstract_class_declaration" => {
+                        let name = child
+                            .child_by_field_name("name")
+                            .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                            .unwrap_or("")
+                            .to_string();
+                        if !name.is_empty() {
+                            exports.push(ExportEntry {
+                                name,
+                                kind: ExportKind::Named,
+                                line,
+                            });
+                        }
+                    }
+                    "identifier" => {
+                        // `export default identifier`
+                        let name = child
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or("")
+                            .to_string();
+                        if !name.is_empty() {
+                            exports.push(ExportEntry {
+                                name,
+                                kind: ExportKind::Default,
+                                line,
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn extract_vi_mock(node: Node, source: &str, scope: MockScope) -> Option<ViMockCall> {
         let args = node.child_by_field_name("arguments")?;
         if args.named_child_count() == 0 {
@@ -281,11 +400,69 @@ impl TsParser {
             }
             None
         })?;
+
+        // Extract factory keys from second argument if present
+        let factory_keys = if args.named_child_count() > 1 {
+            let second = args.named_child(1)?;
+            Self::extract_factory_keys(second, source)
+        } else {
+            Vec::new()
+        };
+
         Some(ViMockCall {
             source: src,
             line: node.start_position().row + 1,
             scope,
+            factory_keys,
         })
+    }
+
+    /// Extract the keys returned by a vi.mock factory function.
+    fn extract_factory_keys(node: Node, source: &str) -> Vec<String> {
+        let mut keys = Vec::new();
+
+        // The factory is typically an arrow function or function expression
+        // vi.mock("path", () => ({ default: "foo", named: "bar" }))
+        if node.kind() == "arrow_function" || node.kind() == "function" {
+            // Find the return statement
+            if let Some(body) = node.child_by_field_name("body") {
+                Self::collect_returned_keys(body, source, &mut keys);
+            }
+        }
+
+        keys
+    }
+
+    /// Recursively collect keys from object literals in return statements.
+    fn collect_returned_keys(node: Node, source: &str, keys: &mut Vec<String>) {
+        match node.kind() {
+            "object" | "object_pattern" => {
+                // Collect keys from this object
+                for i in 0..node.named_child_count() {
+                    if let Some(child) = node.named_child(i) {
+                        if child.kind() == "pair" || child.kind() == "property" {
+                            if let Some(key) = child.child_by_field_name("key") {
+                                if let Ok(text) = key.utf8_text(source.as_bytes()) {
+                                    keys.push(text.to_string());
+                                }
+                            }
+                        } else if child.kind() == "shorthand_property_identifier" {
+                            if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                                keys.push(text.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            "statement_block" | "return_statement" | "parenthesized_expression" => {
+                for i in 0..node.named_child_count() {
+                    if let Some(child) = node.named_child(i) {
+                        Self::collect_returned_keys(child, source, keys);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn parse_import(node: Node, source: &str) -> Option<ImportEntry> {
@@ -491,6 +668,8 @@ impl TsParser {
             uses_fit_or_xit,
             has_done_callback,
             has_conditional_expect: st.has_conditional_expect,
+            weak_assertion_count: st.weak_assertion_count,
+            has_real_timers_call: st.has_real_timers_call,
         })
     }
 
@@ -607,6 +786,14 @@ impl TsParser {
                     if !has_chained_assertion {
                         st.has_expect_call_without_assertion = true;
                     }
+                    // Check if this is a weak assertion (e.g. toBeDefined, toBeTruthy).
+                    if let Some((matcher, negated)) = Self::expect_matcher_info(node, source) {
+                        let is_weak_matcher = Self::WEAK_MATCHERS.contains(&matcher);
+                        let is_negated_throw = negated && matcher == "toThrow";
+                        if is_weak_matcher || is_negated_throw {
+                            st.weak_assertion_count += 1;
+                        }
+                    }
                     // Check if expect() wraps an async function.
                     if let Some(args) = node.child_by_field_name("arguments") {
                         if let Some(first_arg) = args.named_child(0) {
@@ -641,6 +828,9 @@ impl TsParser {
                 }
                 if text == "vi.useFakeTimers" {
                     st.uses_fake_timers = true;
+                }
+                if text == "vi.useRealTimers" {
+                    st.has_real_timers_call = true;
                 }
                 if text == "Math.random" || text == "crypto.randomUUID" {
                     st.uses_random = true;
@@ -711,6 +901,65 @@ impl TsParser {
         false
     }
 
+    /// Extract the final chained matcher name from an `expect()` call node,
+    /// along with whether it's negated (e.g. `.not.toThrow()`).
+    /// For `expect(x).toBeDefined()`, returns `("toBeDefined", false)`.
+    /// For `expect(x).not.toBe(2)`, returns `("toBe", true)`.
+    /// For `expect(() => fn()).not.toThrow()`, returns `("toThrow", true)`.
+    fn expect_matcher_info<'a>(expect_node: Node, source: &'a str) -> Option<(&'a str, bool)> {
+        // Walk up from expect to find the outermost call_expression in the chain.
+        // Handles patterns like: expect(x).toBe(y), expect(x).not.toThrow(), etc.
+        let mut curr = expect_node;
+        let mut has_not = false;
+        loop {
+            let parent = curr.parent()?;
+            if parent.kind() == "member_expression" {
+                if let Some(prop) = parent.child_by_field_name("property") {
+                    if prop.utf8_text(source.as_bytes()).unwrap_or("") == "not" {
+                        has_not = true;
+                    }
+                }
+                let grandparent = parent.parent()?;
+                if grandparent.kind() == "call_expression"
+                    || grandparent.kind() == "member_expression"
+                {
+                    curr = grandparent;
+                    continue;
+                }
+            } else if parent.kind() == "call_expression" {
+                // e.g. curr = member_expression (.toThrow), parent = call_expression (toThrow())
+                let grandparent = parent.parent()?;
+                if grandparent.kind() == "member_expression" {
+                    curr = grandparent;
+                    continue;
+                }
+                curr = parent;
+            }
+            break;
+        }
+        if curr.kind() == "call_expression" {
+            if let Some(func) = curr.child_by_field_name("function") {
+                if func.kind() == "member_expression" {
+                    if let Some(prop) = func.child_by_field_name("property") {
+                        let matcher = prop.utf8_text(source.as_bytes()).unwrap_or("");
+                        if matcher == "not" {
+                            return None;
+                        }
+                        return Some((matcher, has_not));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    const WEAK_MATCHERS: &[&str] = &[
+        "toBeDefined",
+        "toBeUndefined",
+        "toBeTruthy",
+        "toBeFalsy",
+    ];
+
     /// Check if a subtree contains an `expect()` call.
     fn contains_expect_call(node: Node, source: &str) -> bool {
         if node.kind() == "call_expression" {
@@ -750,6 +999,8 @@ struct Analysis {
     has_async_expect_wrapper: bool,
     has_conditional_expect: bool,
     in_conditional: bool,
+    weak_assertion_count: usize,
+    has_real_timers_call: bool,
 }
 
 #[cfg(test)]
@@ -1195,6 +1446,32 @@ vi.mock(import('../infrastructure/database'));
     }
 
     #[test]
+    fn parse_vi_mock_exact_integration_fixture() {
+        let dir = write_temp(
+            r#"
+import { test, expect, vi } from 'vitest';
+
+vi.mock('./my-module2', () => ({
+    foo: vi.fn(),
+    nonexistent: vi.fn(),
+}));
+
+test('mocks', () => {
+    expect(true).toBe(true);
+});
+"#,
+            "my-module2.test.ts",
+        );
+        let path = dir.path().join("my-module2.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.vi_mocks.len(), 1, "Expected 1 vi.mock(), got {}", module.vi_mocks.len());
+        assert_eq!(module.vi_mocks[0].source, "./my-module2");
+        assert_eq!(module.vi_mocks[0].factory_keys, vec!["foo", "nonexistent"]);
+    }
+
+    #[test]
     fn parse_vi_mock_template_interpolation_ignored() {
         let dir = write_temp(
             r#"
@@ -1209,5 +1486,106 @@ vi.mock(`../${name}`);
         let module = parser.parse_file(&path).unwrap();
 
         assert_eq!(module.vi_mocks.len(), 0);
+    }
+
+    #[test]
+    fn parse_source_module_named_exports() {
+        let dir = write_temp(
+            r#"
+export const calculateTotal = (items: number[]) => items.reduce((a, b) => a + b, 0);
+export function formatCurrency(amount: number): string {
+    return `$${amount.toFixed(2)}`;
+}
+export class UserService {}
+"#,
+            "utils.ts",
+        );
+        let path = dir.path().join("utils.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.exports.len(), 3);
+        assert!(module.exports.iter().any(|e| e.name == "calculateTotal" && e.kind == ExportKind::Named));
+        assert!(module.exports.iter().any(|e| e.name == "formatCurrency" && e.kind == ExportKind::Named));
+        assert!(module.exports.iter().any(|e| e.name == "UserService" && e.kind == ExportKind::Named));
+    }
+
+    #[test]
+    fn parse_source_module_default_export() {
+        let dir = write_temp(
+            r#"
+export default function app() {}
+"#,
+            "app.ts",
+        );
+        let path = dir.path().join("app.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.exports.len(), 1);
+        assert_eq!(module.exports[0].kind, ExportKind::Default);
+    }
+
+    #[test]
+    fn parse_source_module_re_exports() {
+        let dir = write_temp(
+            r#"
+export { foo, bar } from './other';
+"#,
+            "reexport.ts",
+        );
+        let path = dir.path().join("reexport.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.exports.len(), 2);
+        assert!(module.exports.iter().any(|e| e.name == "foo"));
+        assert!(module.exports.iter().any(|e| e.name == "bar"));
+    }
+
+    #[test]
+    fn parse_source_module_namespace_export() {
+        let dir = write_temp(
+            r#"
+export * from './utils';
+"#,
+            "barrel.ts",
+        );
+        let path = dir.path().join("barrel.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.exports.len(), 1);
+        assert_eq!(module.exports[0].kind, ExportKind::Namespace);
+    }
+
+    #[test]
+    fn parse_not_to_throw_is_weak() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from 'vitest';
+
+test('not toThrow', () => {
+    expect(() => doSomething()).not.toThrow();
+});
+"#,
+            "not_throw.test.ts",
+        );
+        let path = dir.path().join("not_throw.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        let tb = &module.test_blocks[0];
+        eprintln!("test_blocks.len()={}", module.test_blocks.len());
+        eprintln!("assertion_count={}", tb.assertion_count);
+        eprintln!("weak_assertion_count={}", tb.weak_assertion_count);
+        eprintln!("has_expect_call_without_assertion={}", tb.has_expect_call_without_assertion);
+
+        assert_eq!(module.test_blocks.len(), 1);
+        assert!(
+            module.test_blocks[0].weak_assertion_count > 0,
+            "not.toThrow() should be detected as weak assertion, weak_assertion_count={}",
+            module.test_blocks[0].weak_assertion_count
+        );
     }
 }

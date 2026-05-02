@@ -1,4 +1,4 @@
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 /// Flags tests that call `expect()` without a chained assertion method
@@ -18,7 +18,7 @@ impl Rule for ValidExpectRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -61,7 +61,7 @@ impl Rule for ValidExpectInPromiseRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -106,7 +106,7 @@ impl Rule for ValidDescribeCallbackRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .describe_blocks
             .iter()
@@ -150,7 +150,7 @@ impl Rule for ValidTitleRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let mut out = Vec::new();
 
         for tb in &module.test_blocks {
@@ -235,7 +235,7 @@ impl Rule for NoUnneededAsyncExpectFunctionRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -300,7 +300,7 @@ test('bare expect', () => {
             "bare_expect.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidExpectRule.check(&module, &ctx);
+        let v = ValidExpectRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-001");
     }
@@ -318,7 +318,7 @@ test('proper expect', () => {
             "proper_expect.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidExpectRule.check(&module, &ctx);
+        let v = ValidExpectRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -335,7 +335,7 @@ test('return expect', () => {
             "return_expect.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidExpectInPromiseRule.check(&module, &ctx);
+        let v = ValidExpectInPromiseRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-002");
     }
@@ -353,7 +353,7 @@ test('no return', async () => {
             "no_return.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidExpectInPromiseRule.check(&module, &ctx);
+        let v = ValidExpectInPromiseRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -372,7 +372,7 @@ describe('async describe', async () => {
             "async_describe.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidDescribeCallbackRule.check(&module, &ctx);
+        let v = ValidDescribeCallbackRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-003");
     }
@@ -392,7 +392,7 @@ describe('sync describe', () => {
             "sync_describe.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidDescribeCallbackRule.check(&module, &ctx);
+        let v = ValidDescribeCallbackRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -409,7 +409,7 @@ test(`template title`, () => {
             "template_title.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidTitleRule.check(&module, &ctx);
+        let v = ValidTitleRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-004");
     }
@@ -429,7 +429,7 @@ describe('', () => {
             "empty_describe.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidTitleRule.check(&module, &ctx);
+        let v = ValidTitleRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-004");
     }
@@ -449,7 +449,7 @@ describe('proper title', () => {
             "proper_titles.test.ts",
         );
         let ctx = default_ctx();
-        let v = ValidTitleRule.check(&module, &ctx);
+        let v = ValidTitleRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -468,7 +468,7 @@ test('async wrapper', () => {
             "async_wrapper.test.ts",
         );
         let ctx = default_ctx();
-        let v = NoUnneededAsyncExpectFunctionRule.check(&module, &ctx);
+        let v = NoUnneededAsyncExpectFunctionRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-VAL-005");
     }
@@ -486,7 +486,7 @@ test('sync expect', () => {
             "sync_expect.test.ts",
         );
         let ctx = default_ctx();
-        let v = NoUnneededAsyncExpectFunctionRule.check(&module, &ctx);
+        let v = NoUnneededAsyncExpectFunctionRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 }

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -87,6 +88,8 @@ pub struct TestBlock {
     pub uses_fit_or_xit: bool,
     pub has_done_callback: bool,
     pub has_conditional_expect: bool,
+    pub weak_assertion_count: usize,
+    pub has_real_timers_call: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +118,7 @@ pub struct ParsedModule {
     pub expects_outside_tests: Vec<ExpectOutsideTest>,
     pub imports_node_test: bool,
     pub snapshot_sizes: Vec<SnapshotSize>,
+    pub exports: Vec<ExportEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +130,98 @@ pub struct ExpectOutsideTest {
 pub struct SnapshotSize {
     pub line: usize,
     pub size: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportKind {
+    Named,
+    Default,
+    Namespace,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExportEntry {
+    pub name: String,
+    pub kind: ExportKind,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticLevel {
+    Info,
+    Warning,
+}
+
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    pub level: DiagnosticLevel,
+    pub message: String,
+    pub file_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Default)]
+pub struct ModuleGraph {
+    pub modules: HashMap<PathBuf, ParsedModule>,
+    pub edges: HashMap<PathBuf, Vec<PathBuf>>,
+}
+
+impl ModuleGraph {
+    /// Build a module graph from test modules and source modules.
+    #[must_use]
+    pub fn new(test_modules: &[ParsedModule], source_modules: &[ParsedModule]) -> Self {
+        let mut modules = HashMap::new();
+        let mut edges = HashMap::new();
+
+        // Add all modules to the graph
+        for module in test_modules.iter().chain(source_modules.iter()) {
+            modules.insert(module.file_path.clone(), module.clone());
+            edges.insert(module.file_path.clone(), Vec::new());
+        }
+
+        // Build edges from imports
+        for module in test_modules {
+            for imp in &module.imports_parsed {
+                // Try to resolve relative imports
+                if imp.source.starts_with('.') || imp.source.starts_with('/') {
+                    if let Some(parent) = module.file_path.parent() {
+                        let base = parent.join(&imp.source);
+                        let exts = [".ts", ".tsx", ".js", ".jsx"];
+                        for ext in &exts {
+                            let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
+                            if modules.contains_key(&candidate) {
+                                edges
+                                    .entry(module.file_path.clone())
+                                    .or_default()
+                                    .push(candidate);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Self { modules, edges }
+    }
+
+    /// Get a module by its file path.
+    #[must_use]
+    pub fn get_module(&self, path: &Path) -> Option<&ParsedModule> {
+        self.modules.get(path)
+    }
+
+    /// Get the dependencies of a module.
+    #[must_use]
+    pub fn get_dependencies(&self, path: &Path) -> Vec<&ParsedModule> {
+        self.edges
+            .get(path)
+            .map(|deps| {
+                deps.iter()
+                    .filter_map(|dep| self.modules.get(dep))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -149,6 +245,7 @@ pub struct ViMockCall {
     pub source: String,
     pub line: usize,
     pub scope: MockScope,
+    pub factory_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

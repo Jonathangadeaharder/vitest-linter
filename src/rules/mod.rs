@@ -1,11 +1,22 @@
 use crate::config::Config;
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 
 /// Context passed to each rule during evaluation, including the active
 /// configuration and all modules in the current group.
 pub struct LintContext<'a> {
     pub config: &'a Config,
     pub all_modules: &'a [ParsedModule],
+}
+
+impl Default for LintContext<'_> {
+    fn default() -> Self {
+        use std::sync::OnceLock;
+        static DEFAULT_CONFIG: OnceLock<Config> = OnceLock::new();
+        Self {
+            config: DEFAULT_CONFIG.get_or_init(Config::default),
+            all_modules: &[],
+        }
+    }
 }
 
 /// Trait implemented by every lint rule.
@@ -19,7 +30,7 @@ pub trait Rule {
     /// Category this rule belongs to.
     fn category(&self) -> Category;
     /// Evaluate the rule against a parsed module and return any violations.
-    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>) -> Vec<Violation>;
+    fn check(&self, module: &ParsedModule, ctx: &LintContext<'_>, graph: &ModuleGraph) -> Vec<Violation>;
 }
 
 pub mod consistency;
@@ -49,9 +60,12 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::MissingAwaitAssertionRule),
         Box::new(maintenance::FocusedTestRule),
         Box::new(maintenance::MissingMockCleanupRule),
+        Box::new(maintenance::WeakAssertionRule),
+        Box::new(maintenance::ImplementationCoupledRule),
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
+        Box::new(dependencies::MockExportValidationRule),
         Box::new(validation::ValidExpectRule),
         Box::new(validation::ValidExpectInPromiseRule),
         Box::new(validation::ValidDescribeCallbackRule),
@@ -97,7 +111,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 49);
+        assert_eq!(rules.len(), 52);
     }
 
     #[test]
@@ -119,9 +133,14 @@ mod tests {
             "VITEST-MNT-006",
             "VITEST-MNT-007",
             "VITEST-MNT-008",
+            "VITEST-MNT-009",
+            "VITEST-MNT-010",
+            "VITEST-MNT-010",
             "VITEST-DEP-001",
             "VITEST-DEP-002",
             "VITEST-DEP-003",
+            "VITEST-DEP-004",
+            "VITEST-DEP-004",
             "VITEST-VAL-001",
             "VITEST-VAL-002",
             "VITEST-VAL-003",
@@ -194,9 +213,9 @@ mod tests {
             .filter(|r| r.category() == Category::Validation)
             .collect();
         assert_eq!(flk.len(), 5);
-        assert_eq!(mnt.len(), 15);
+        assert_eq!(mnt.len(), 17);
         assert_eq!(str_.len(), 9);
-        assert_eq!(dep.len(), 6);
+        assert_eq!(dep.len(), 7);
         assert_eq!(val.len(), 14);
     }
 
@@ -219,9 +238,12 @@ mod tests {
             ("VITEST-MNT-006", "MissingAwaitAssertionRule"),
             ("VITEST-MNT-007", "FocusedTestRule"),
             ("VITEST-MNT-008", "MissingMockCleanupRule"),
+            ("VITEST-MNT-009", "WeakAssertionRule"),
+            ("VITEST-MNT-010", "ImplementationCoupledRule"),
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),
+            ("VITEST-DEP-004", "MockExportValidationRule"),
             ("VITEST-VAL-001", "ValidExpectRule"),
             ("VITEST-VAL-002", "ValidExpectInPromiseRule"),
             ("VITEST-VAL-003", "ValidDescribeCallbackRule"),

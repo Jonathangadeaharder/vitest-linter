@@ -1,4 +1,4 @@
-use crate::models::{Category, MockScope, ParsedModule, Severity, Violation};
+use crate::models::{Category, MockScope, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 pub struct RequireHookRule;
@@ -16,7 +16,7 @@ impl Rule for RequireHookRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let first_top_level = module
             .vi_mocks
             .iter()
@@ -60,7 +60,7 @@ impl Rule for RequireTopLevelDescribeRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         if module.describe_blocks.is_empty() {
             return vec![];
         }
@@ -166,7 +166,7 @@ impl Rule for RequireToThrowMessageRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -252,7 +252,7 @@ fn has_empty_to_throw(line: &str) -> bool {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::models::{DescribeBlock, HookCall, TestBlock, ViMockCall};
+    use crate::models::{DescribeBlock, HookCall, ModuleGraph, TestBlock, ViMockCall};
     use std::path::PathBuf;
 
     fn default_ctx() -> crate::rules::LintContext<'static> {
@@ -283,6 +283,7 @@ mod tests {
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         }
     }
 
@@ -294,13 +295,14 @@ mod tests {
                 source: "lodash".to_string(),
                 line: 5,
                 scope: MockScope::Module,
+                factory_keys: Vec::new(),
             }],
             vec![],
             vec![],
             vec![],
         );
         let ctx = default_ctx();
-        let v = RequireHookRule.check(&module, &ctx);
+        let v = RequireHookRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-REQ-001");
         assert_eq!(v[0].line, 5);
@@ -314,13 +316,14 @@ mod tests {
                 source: "lodash".to_string(),
                 line: 5,
                 scope: MockScope::Hook,
+                factory_keys: Vec::new(),
             }],
             vec![],
             vec![],
             vec![],
         );
         let ctx = default_ctx();
-        let v = RequireHookRule.check(&module, &ctx);
+        let v = RequireHookRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -328,7 +331,7 @@ mod tests {
     fn req_001_no_violation_when_no_mocks() {
         let module = make_module("test.ts", vec![], vec![], vec![], vec![]);
         let ctx = default_ctx();
-        let v = RequireHookRule.check(&module, &ctx);
+        let v = RequireHookRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -341,16 +344,19 @@ mod tests {
                     source: "lodash".to_string(),
                     line: 3,
                     scope: MockScope::Hook,
+                    factory_keys: Vec::new(),
                 },
                 ViMockCall {
                     source: "axios".to_string(),
                     line: 5,
                     scope: MockScope::Module,
+                    factory_keys: Vec::new(),
                 },
                 ViMockCall {
                     source: "react".to_string(),
                     line: 8,
                     scope: MockScope::Module,
+                    factory_keys: Vec::new(),
                 },
             ],
             vec![],
@@ -358,7 +364,7 @@ mod tests {
             vec![],
         );
         let ctx = default_ctx();
-        let v = RequireHookRule.check(&module, &ctx);
+        let v = RequireHookRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].line, 5);
     }
@@ -417,6 +423,8 @@ describe('grouped', () => {
                     uses_fit_or_xit: false,
                     has_done_callback: false,
                     has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
                 },
                 TestBlock {
                     name: "inside describe".to_string(),
@@ -443,6 +451,8 @@ describe('grouped', () => {
                     uses_fit_or_xit: false,
                     has_done_callback: false,
                     has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
                 },
             ],
             describe_blocks: vec![DescribeBlock {
@@ -459,10 +469,11 @@ describe('grouped', () => {
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
 
         let ctx = default_ctx();
-        let v = RequireTopLevelDescribeRule.check(&module, &ctx);
+        let v = RequireTopLevelDescribeRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-REQ-002");
         assert_eq!(v[0].line, 4);
@@ -498,12 +509,14 @@ describe('grouped', () => {
                 uses_fit_or_xit: false,
                 has_done_callback: false,
                 has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
             }],
             vec![],
             vec![],
         );
         let ctx = default_ctx();
-        let v = RequireTopLevelDescribeRule.check(&module, &ctx);
+        let v = RequireTopLevelDescribeRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -537,6 +550,8 @@ describe('grouped', () => {
                 uses_fit_or_xit: false,
                 has_done_callback: false,
                 has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
             }],
             vec![DescribeBlock {
                 name: "group".to_string(),
@@ -551,7 +566,7 @@ describe('grouped', () => {
             vec![],
         );
         let ctx = default_ctx();
-        let v = RequireTopLevelDescribeRule.check(&module, &ctx);
+        let v = RequireTopLevelDescribeRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -579,9 +594,10 @@ expect(() => fn()).toThrow();
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         let ctx = default_ctx();
-        let v = RequireToThrowMessageRule.check(&module, &ctx);
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].rule_id, "VITEST-REQ-003");
         assert_eq!(v[0].line, 1);
@@ -612,9 +628,10 @@ expect(() => fn()).toThrow(/pattern/);
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         let ctx = default_ctx();
-        let v = RequireToThrowMessageRule.check(&module, &ctx);
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -641,9 +658,10 @@ expect(() => fn()).toThrow(/pattern/);
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         let ctx = default_ctx();
-        let v = RequireToThrowMessageRule.check(&module, &ctx);
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
     }
 
@@ -670,9 +688,10 @@ expect(() => fn()).toThrow(/pattern/);
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         let ctx = default_ctx();
-        let v = RequireToThrowMessageRule.check(&module, &ctx);
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
     }
 
@@ -699,9 +718,10 @@ expect(() => fn()).toThrow(/pattern/);
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         let ctx = default_ctx();
-        let v = RequireToThrowMessageRule.check(&module, &ctx);
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert_eq!(v.len(), 1);
     }
 

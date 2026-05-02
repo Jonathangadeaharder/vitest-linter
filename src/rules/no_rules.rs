@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 // ---------------------------------------------------------------------------
@@ -22,7 +22,7 @@ impl Rule for NoStandaloneExpectRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .expects_outside_tests
             .iter()
@@ -61,7 +61,7 @@ impl Rule for NoIdenticalTitleRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let mut violations = Vec::new();
         let mut seen_titles: HashSet<&str> = HashSet::new();
 
@@ -135,7 +135,7 @@ impl Rule for NoCommentedOutTestsRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -187,7 +187,7 @@ impl Rule for NoTestPrefixesRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -232,7 +232,7 @@ impl Rule for NoDuplicateHooksRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         use crate::models::HookKind;
 
         let mut violations = Vec::new();
@@ -306,7 +306,7 @@ impl Rule for NoImportNodeTestRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         if module.imports_node_test {
             vec![Violation {
                 rule_id: self.id().to_string(),
@@ -349,7 +349,7 @@ impl Rule for NoInterpolationInSnapshotsRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -407,7 +407,7 @@ impl Rule for NoLargeSnapshotsRule {
     fn category(&self) -> Category {
         Category::Validation
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .snapshot_sizes
             .iter()
@@ -452,7 +452,7 @@ impl Rule for NoDoneCallbackRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()
@@ -494,7 +494,7 @@ impl Rule for NoConditionalExpectRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         module
             .test_blocks
             .iter()

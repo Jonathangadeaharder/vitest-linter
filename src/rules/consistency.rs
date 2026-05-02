@@ -1,4 +1,4 @@
-use crate::models::{Category, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::Rule;
 
 pub struct ConsistentTestItRule;
@@ -16,7 +16,7 @@ impl Rule for ConsistentTestItRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -78,7 +78,7 @@ impl Rule for ConsistentVitestViRule {
     fn category(&self) -> Category {
         Category::Dependencies
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let Ok(source) = std::fs::read_to_string(&module.file_path) else {
             return vec![];
         };
@@ -145,7 +145,7 @@ impl Rule for HoistedApisOnTopRule {
     fn category(&self) -> Category {
         Category::Structure
     }
-    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>) -> Vec<Violation> {
+    fn check(&self, module: &ParsedModule, _ctx: &crate::rules::LintContext<'_>, _graph: &ModuleGraph) -> Vec<Violation> {
         let first_test_line = module.test_blocks.iter().map(|t| t.line).min();
 
         let first_describe_line = module.describe_blocks.iter().map(|d| d.line).min();
@@ -214,6 +214,7 @@ mod tests {
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            exports: Vec::new(),
         };
         TempModule { _dir: dir, module }
     }
@@ -237,7 +238,7 @@ it('b', () => {});
 "#,
             "mixed.test.ts",
         );
-        let v = ConsistentTestItRule.check(&tm.module, &default_ctx());
+        let v = ConsistentTestItRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-CON-001");
     }
@@ -251,7 +252,7 @@ test('b', () => {});
 "#,
             "testonly.test.ts",
         );
-        let v = ConsistentTestItRule.check(&tm.module, &default_ctx());
+        let v = ConsistentTestItRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -264,7 +265,7 @@ it('b', () => {});
 "#,
             "itonly.test.ts",
         );
-        let v = ConsistentTestItRule.check(&tm.module, &default_ctx());
+        let v = ConsistentTestItRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -277,7 +278,7 @@ it('b', () => {});
 "#,
             "skip.test.ts",
         );
-        let v = ConsistentTestItRule.check(&tm.module, &default_ctx());
+        let v = ConsistentTestItRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert_eq!(v.len(), 1);
     }
 
@@ -291,7 +292,7 @@ it('b', () => {});
             namespace: Some("vitest".to_string()),
             line: 1,
         });
-        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx());
+        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-CON-003");
     }
@@ -306,7 +307,7 @@ it('b', () => {});
             namespace: None,
             line: 1,
         });
-        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx());
+        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -320,7 +321,7 @@ it('b', () => {});
             namespace: Some("vitest".to_string()),
             line: 1,
         });
-        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx());
+        let v = ConsistentVitestViRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -355,14 +356,17 @@ it('b', () => {});
             uses_fit_or_xit: false,
             has_done_callback: false,
             has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
         });
         tm.module.vi_mocks.push(ViMockCall {
             source: "./foo".to_string(),
             line: 10,
             scope: MockScope::Module,
+            factory_keys: Vec::new(),
         });
         let _dir = dir;
-        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx());
+        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].rule_id, "VITEST-CON-004");
     }
@@ -377,6 +381,7 @@ it('b', () => {});
             source: "./foo".to_string(),
             line: 3,
             scope: MockScope::Module,
+            factory_keys: Vec::new(),
         });
         tm.module.test_blocks.push(TestBlock {
             name: "a".to_string(),
@@ -403,9 +408,11 @@ it('b', () => {});
             uses_fit_or_xit: false,
             has_done_callback: false,
             has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
         });
         let _dir = dir;
-        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx());
+        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -440,14 +447,17 @@ it('b', () => {});
             uses_fit_or_xit: false,
             has_done_callback: false,
             has_conditional_expect: false,
+            weak_assertion_count: 0,
+            has_real_timers_call: false,
         });
         tm.module.vi_mocks.push(ViMockCall {
             source: "./bar".to_string(),
             line: 10,
             scope: MockScope::Hook,
+            factory_keys: Vec::new(),
         });
         let _dir = dir;
-        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx());
+        let v = HoistedApisOnTopRule.check(&tm.module, &default_ctx(), &ModuleGraph::default());
         assert!(v.is_empty());
     }
 }
