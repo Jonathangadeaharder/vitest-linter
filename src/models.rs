@@ -179,13 +179,14 @@ impl ModuleGraph {
         }
 
         // Build edges from imports
-        for module in test_modules {
+        for module in test_modules.iter().chain(source_modules.iter()) {
             for imp in &module.imports_parsed {
                 // Try to resolve relative imports
                 if imp.source.starts_with('.') || imp.source.starts_with('/') {
                     if let Some(parent) = module.file_path.parent() {
                         let base = parent.join(&imp.source);
                         let exts = [".ts", ".tsx", ".js", ".jsx"];
+                        let mut resolved = false;
                         for ext in &exts {
                             let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
                             if modules.contains_key(&candidate) {
@@ -193,7 +194,21 @@ impl ModuleGraph {
                                     .entry(module.file_path.clone())
                                     .or_default()
                                     .push(candidate);
+                                resolved = true;
                                 break;
+                            }
+                        }
+                        // Check for index files if direct file not found
+                        if !resolved {
+                            for ext in &exts {
+                                let candidate = base.join(format!("index{}", ext));
+                                if modules.contains_key(&candidate) {
+                                    edges
+                                        .entry(module.file_path.clone())
+                                        .or_default()
+                                        .push(candidate);
+                                    break;
+                                }
                             }
                         }
                     }

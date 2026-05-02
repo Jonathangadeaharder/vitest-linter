@@ -593,6 +593,7 @@ impl Rule for ImplementationCoupledRule {
         graph: &ModuleGraph,
     ) -> Vec<Violation> {
         // Only flag files that import exactly one production module.
+        // Allow relative imports (the graph resolves these); exclude test frameworks and packages.
         let prod_imports: Vec<&str> = module
             .imports
             .iter()
@@ -602,8 +603,6 @@ impl Rule for ImplementationCoupledRule {
                     && !imp.starts_with("jest")
                     && !imp.starts_with("@jest")
                     && !imp.contains("node_modules")
-                    && !imp.starts_with(".")
-                    && !imp.starts_with("/")
             })
             .map(|s| s.as_str())
             .collect();
@@ -615,7 +614,32 @@ impl Rule for ImplementationCoupledRule {
         // Resolve the source module from the graph and get its exports.
         let source_module_path = prod_imports[0];
         let resolved = _ctx.config.resolve_module_path(source_module_path);
-        let source_module = match graph.get_module(std::path::Path::new(&resolved)) {
+        let source_module = graph
+            .get_module(std::path::Path::new(&resolved))
+            .or_else(|| {
+                // Try resolving relative imports by checking extensions and index files
+                if resolved.starts_with('.') || resolved.starts_with('/') {
+                    if let Some(parent) = module.file_path.parent() {
+                        let base = parent.join(&resolved);
+                        let exts = ["ts", "tsx", "js", "jsx"];
+                        for ext in &exts {
+                            let candidate = base.with_extension(ext);
+                            if let Some(m) = graph.get_module(&candidate) {
+                                return Some(m);
+                            }
+                        }
+                        for ext in &exts {
+                            let candidate = base.join(format!("index.{}", ext));
+                            if let Some(m) = graph.get_module(&candidate) {
+                                return Some(m);
+                            }
+                        }
+                    }
+                }
+                None
+            });
+
+        let source_module = match source_module {
             Some(m) => m,
             None => return vec![],
         };
@@ -633,7 +657,7 @@ impl Rule for ImplementationCoupledRule {
             return vec![];
         }
 
-        // Check if >80% of test names match export names.
+        // Check if >80% of test names match export names (word-boundary match).
         let export_names: Vec<String> = source_module
             .exports
             .iter()
@@ -645,7 +669,9 @@ impl Rule for ImplementationCoupledRule {
             .iter()
             .filter(|tb| {
                 let test_name_lower = tb.name.to_lowercase();
-                export_names.iter().any(|en| test_name_lower.contains(en))
+                export_names
+                    .iter()
+                    .any(|en| contains_word(&test_name_lower, en))
             })
             .count();
 
@@ -676,6 +702,27 @@ impl Rule for ImplementationCoupledRule {
             test_name: None,
         }]
     }
+}
+
+/// Check if `word` appears as a whole word in `text`.
+/// Word boundaries are non-alphanumeric characters or start/end of string.
+fn contains_word(text: &str, word: &str) -> bool {
+    if word.is_empty() {
+        return false;
+    }
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(word) {
+        let abs_pos = start + pos;
+        let before_ok = abs_pos == 0 || !text.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
+        let after_pos = abs_pos + word.len();
+        let after_ok =
+            after_pos >= text.len() || !text.as_bytes()[after_pos].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = abs_pos + 1;
+    }
+    false
 }
 
 #[cfg(test)]
