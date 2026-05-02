@@ -595,16 +595,16 @@ impl Rule for ImplementationCoupledRule {
         // Only flag files that import exactly one production module.
         // Allow relative imports (the graph resolves these); exclude test frameworks and packages.
         let prod_imports: Vec<&str> = module
-            .imports
+            .imports_parsed
             .iter()
             .filter(|imp| {
-                !imp.starts_with("vitest")
-                    && !imp.starts_with("@testing-library")
-                    && !imp.starts_with("jest")
-                    && !imp.starts_with("@jest")
-                    && !imp.contains("node_modules")
+                !imp.source.starts_with("vitest")
+                    && !imp.source.starts_with("@testing-library")
+                    && !imp.source.starts_with("jest")
+                    && !imp.source.starts_with("@jest")
+                    && !imp.source.contains("node_modules")
             })
-            .map(|s| s.as_str())
+            .map(|imp| imp.source.as_str())
             .collect();
 
         if prod_imports.len() != 1 {
@@ -728,6 +728,7 @@ fn contains_word(text: &str, word: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ImportEntry;
     use std::path::PathBuf;
 
     fn empty_module() -> ParsedModule {
@@ -747,10 +748,23 @@ mod tests {
         }
     }
 
+    fn import_entry(source: &str) -> ImportEntry {
+        ImportEntry {
+            source: source.to_string(),
+            named: vec![],
+            default: None,
+            namespace: None,
+            line: 1,
+        }
+    }
+
     #[test]
     fn implementation_coupled_no_prod_imports() {
         let mut module = empty_module();
-        module.imports = vec!["vitest".into(), "@testing-library/react".into()];
+        module.imports_parsed = vec![
+            import_entry("vitest"),
+            import_entry("@testing-library/react"),
+        ];
         let rule = ImplementationCoupledRule;
         let violations = rule.check(
             &module,
@@ -763,7 +777,11 @@ mod tests {
     #[test]
     fn implementation_coupled_multiple_prod_imports() {
         let mut module = empty_module();
-        module.imports = vec!["vitest".into(), "lodash".into(), "axios".into()];
+        module.imports_parsed = vec![
+            import_entry("vitest"),
+            import_entry("lodash"),
+            import_entry("axios"),
+        ];
         let rule = ImplementationCoupledRule;
         let violations = rule.check(
             &module,
