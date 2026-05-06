@@ -187,13 +187,13 @@ mod tests {
         let rules = v1_0_rules();
         let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
         let expected = [
-            "VITEST-MNT-007", // FocusedTestRule (NoOnlyRule)
-            "VITEST-MNT-005", // EmptyTestRule (NoSkipRule)
-            "VITEST-NO-003",  // NoCommentedOutTestsRule
-            "VITEST-MNT-006", // MissingAwaitAssertionRule (AsyncWithoutAwaitRule)
-            "VITEST-FLK-001", // TimeoutRule (SetTimeoutInTestRule)
-            "VITEST-MNT-004", // TryCatchRule (MissingExpectInTryRule)
-            "VITEST-MNT-003", // ConditionalLogicRule (SharedDescribeStateRule)
+            "VITEST-MNT-007",  // FocusedTestRule (NoOnlyRule)
+            "VITEST-MNT-005",  // EmptyTestRule (NoSkipRule)
+            "VITEST-NO-003",   // NoCommentedOutTestsRule
+            "VITEST-MNT-006",  // MissingAwaitAssertionRule (AsyncWithoutAwaitRule)
+            "VITEST-FLK-001",  // TimeoutRule (SetTimeoutInTestRule)
+            "VITEST-MNT-004",  // TryCatchRule (MissingExpectInTryRule)
+            "VITEST-MNT-003",  // ConditionalLogicRule (SharedDescribeStateRule)
             "VITEST-PREF-009", // PreferHooksOnTopRule (BeforeEachAfterFirstItRule)
         ];
         for id in &expected {
