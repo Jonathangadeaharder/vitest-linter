@@ -7,21 +7,23 @@ use walkdir::WalkDir;
 use crate::config::{Config, TsConfig};
 use crate::models::{Diagnostic, ModuleGraph, ParsedModule, Violation};
 use crate::parser::TsParser;
-use crate::rules::{all_rules, LintContext};
+use crate::rules::{all_rules, v1_0_rules, LintContext};
 use crate::suppression::SuppressionMap;
 
 /// Top-level linting engine that coordinates file discovery, parsing, rule
 /// evaluation, and suppression filtering.
 pub struct LintEngine {
     parser: TsParser,
+    unstable_rules: bool,
 }
 
 impl LintEngine {
     /// Create a new engine backed by a tree-sitter TypeScript parser.
     #[allow(clippy::missing_errors_doc)]
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new(unstable_rules: bool) -> anyhow::Result<Self> {
         Ok(Self {
             parser: TsParser::new()?,
+            unstable_rules,
         })
     }
 
@@ -110,7 +112,11 @@ impl LintEngine {
             entry.1.push(idx);
         }
 
-        let rules = all_rules();
+        let rules = if self.unstable_rules {
+            all_rules()
+        } else {
+            v1_0_rules()
+        };
         let mut violations = Vec::new();
         let diagnostics = Vec::new();
 

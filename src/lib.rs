@@ -53,6 +53,7 @@ pub fn run_cli(
     output: Option<&Path>,
     no_color: bool,
     incremental: bool,
+    unstable_rules: bool,
     base: &str,
 ) -> Result<bool> {
     if no_color {
@@ -74,7 +75,7 @@ pub fn run_cli(
         paths.to_vec()
     };
 
-    let engine = LintEngine::new()?;
+    let engine = LintEngine::new(unstable_rules)?;
     let (violations, diagnostics) = engine.lint_paths(&effective_paths)?;
 
     if format == "json" {
