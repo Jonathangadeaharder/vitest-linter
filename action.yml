@@ -1,0 +1,78 @@
+name: Vitest Linter
+description: Detect test smells in Vitest/TypeScript test files
+branding:
+  icon: search
+  color: yellow
+
+inputs:
+  paths:
+    description: Files or directories to lint
+    required: false
+    default: "."
+  format:
+    description: Output format (terminal, json, sarif)
+    required: false
+    default: sarif
+  no-color:
+    description: Disable colored output
+    required: false
+    default: "false"
+  incremental:
+    description: Only lint changed files
+    required: false
+    default: "false"
+  base:
+    description: Git ref for incremental mode
+    required: false
+    default: HEAD
+
+outputs:
+  sarif-file:
+    description: Path to the generated SARIF file
+    value: ${{ steps.lint.outputs.sarif_file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install vitest-linter
+      shell: bash
+      run: |
+        if ! command -v vitest-linter &> /dev/null; then
+          VERSION="${GITHUB_ACTION_REF#refs/tags/}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_ACTION_REF" ]; then
+            VERSION="latest"
+          fi
+          echo "Installing vitest-linter $VERSION..."
+          if [ "$VERSION" = "latest" ]; then
+            curl --proto '=https' --tlsv1.2 -fsSL https://github.com/Jonathangadeaharder/vitest-linter/releases/latest/download/vitest-linter-installer.sh | sh
+          else
+            curl --proto '=https' --tlsv1.2 -fsSL https://github.com/Jonathangadeaharder/vitest-linter/releases/download/${VERSION}/vitest-linter-installer.sh | sh
+          fi
+        fi
+
+    - name: Run vitest-linter
+      id: lint
+      shell: bash
+      run: |
+        ARGS=()
+        ARGS+=(${{ inputs.paths }})
+        ARGS+=(--format ${{ inputs.format }})
+        if [ "${{ inputs.no-color }}" = "true" ]; then
+          ARGS+=(--no-color)
+        fi
+        if [ "${{ inputs.incremental }}" = "true" ]; then
+          ARGS+=(--incremental --base ${{ inputs.base }})
+        fi
+
+        OUTPUT_FILE="vitest-linter-results.sarif"
+        ARGS+=(--output "$OUTPUT_FILE")
+
+        echo "sarif_file=$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+
+        vitest-linter "${ARGS[@]}" || true
+
+    - name: Upload SARIF
+      uses: github/codeql-action/upload-sarif@v3
+      if: always() && hashFiles('vitest-linter-results.sarif') != ''
+      with:
+        sarif_file: vitest-linter-results.sarif

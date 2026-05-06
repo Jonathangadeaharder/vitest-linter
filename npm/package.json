@@ -11,6 +11,13 @@
   "bin": {
     "vitest-linter": "bin/vitest-linter"
   },
+  "files": [
+    "bin/",
+    "install.js"
+  ],
+  "scripts": {
+    "postinstall": "node install.js"
+  },
   "os": ["darwin", "linux", "win32"],
   "cpu": ["x64", "arm64"],
   "optionalDependencies": {
