@@ -175,7 +175,10 @@ impl TsParser {
                 let text = child.utf8_text(source.as_bytes()).unwrap_or("");
                 if text.contains("vi.fn()") || text.contains("vi.fn(") {
                     if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or("")
+                            .to_string();
                         if name.starts_with("global.") || name.starts_with("globalThis.") {
                             let target_name = name
                                 .strip_prefix("global.")
@@ -544,11 +547,7 @@ impl TsParser {
                 } else {
                     None
                 };
-                let method = full_callee
-                    .split('.')
-                    .next_back()
-                    .unwrap_or("")
-                    .to_string();
+                let method = full_callee.split('.').next_back().unwrap_or("").to_string();
                 pw_module.locator_chains.push(LocatorChain {
                     root: root.to_string(),
                     raw_arg,
@@ -1142,8 +1141,13 @@ impl TsParser {
     }
 
     const WEAK_MATCHERS: &[&str] = &[
-        "toBeDefined", "toBeUndefined", "toBeTruthy", "toBeFalsy",
-        "toBeNull", "toMatchObject", "toHaveProperty",
+        "toBeDefined",
+        "toBeUndefined",
+        "toBeTruthy",
+        "toBeFalsy",
+        "toBeNull",
+        "toMatchObject",
+        "toHaveProperty",
     ];
 
     /// Check if a subtree contains an `expect()` call.
@@ -1850,7 +1854,10 @@ test('test', () => {
         let parser = TsParser::new().unwrap();
         let module = parser.parse_file(&path).unwrap();
 
-        assert!(!module.global_stubs.is_empty(), "Expected global.fetch stub to be detected");
+        assert!(
+            !module.global_stubs.is_empty(),
+            "Expected global.fetch stub to be detected"
+        );
         assert!(module.global_stubs.iter().any(|s| s.target == "fetch"));
     }
 
@@ -1868,7 +1875,10 @@ vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ json: () => ({}) })));
         let parser = TsParser::new().unwrap();
         let module = parser.parse_file(&path).unwrap();
 
-        assert!(!module.global_stubs.is_empty(), "Expected vi.stubGlobal to be detected");
+        assert!(
+            !module.global_stubs.is_empty(),
+            "Expected vi.stubGlobal to be detected"
+        );
         assert_eq!(module.global_stubs[0].target, "fetch");
     }
 
@@ -1892,7 +1902,10 @@ test('a11y', async ({ page }) => {
 
         assert_eq!(module.runtime, TestRuntime::Playwright);
         let pw = module.playwright.as_ref().unwrap();
-        assert!(pw.uses_axe, "Expected axe detection from axe-playwright import");
+        assert!(
+            pw.uses_axe,
+            "Expected axe detection from axe-playwright import"
+        );
     }
 
     #[test]
@@ -1914,7 +1927,9 @@ test('with waitForTimeout', async ({ page }) => {
 
         let pw = module.playwright.as_ref().unwrap();
         assert!(
-            pw.calls.iter().any(|c| c.call_name.contains("waitForTimeout")),
+            pw.calls
+                .iter()
+                .any(|c| c.call_name.contains("waitForTimeout")),
             "Expected waitForTimeout call to be tracked"
         );
     }

@@ -76,7 +76,10 @@ mod tests {
     #[test]
     fn classifies_chained_class() {
         assert_eq!(classify_selector(".foo .bar"), SelectorClass::ChainedClass);
-        assert_eq!(classify_selector(".parent > .child"), SelectorClass::ChainedClass);
+        assert_eq!(
+            classify_selector(".parent > .child"),
+            SelectorClass::ChainedClass
+        );
         assert_eq!(classify_selector("div .a .b"), SelectorClass::ChainedClass);
     }
 

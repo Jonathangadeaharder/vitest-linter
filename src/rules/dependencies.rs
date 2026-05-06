@@ -3,21 +3,28 @@ use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::{LintContext, Rule};
 
 const STABLE_DEP_SUFFIXES: &[&str] = &[
-    ".model.ts", ".model.js",
-    ".util.ts", ".utils.ts", ".util.js", ".utils.js",
-    ".lib.ts", ".lib.js", ".lib",
-    ".helper.ts", ".helpers.ts", ".helper.js", ".helpers.js",
-    ".config.ts", ".config.js",
-    ".constant.ts", ".constants.ts", ".constant.js", ".constants.js",
+    ".model.ts",
+    ".model.js",
+    ".util.ts",
+    ".utils.ts",
+    ".util.js",
+    ".utils.js",
+    ".lib.ts",
+    ".lib.js",
+    ".lib",
+    ".helper.ts",
+    ".helpers.ts",
+    ".helper.js",
+    ".helpers.js",
+    ".config.ts",
+    ".config.js",
+    ".constant.ts",
+    ".constants.ts",
+    ".constant.js",
+    ".constants.js",
 ];
 
-const STABLE_DEP_SEGMENTS: &[&str] = &[
-    "/models/",
-    "/utils/",
-    "/lib/",
-    "/helpers/",
-    "/constants/",
-];
+const STABLE_DEP_SEGMENTS: &[&str] = &["/models/", "/utils/", "/lib/", "/helpers/", "/constants/"];
 
 /// Returns `true` if the module source path looks like a stable dependency
 /// (pure functions, data models, configs — not I/O, API, or SDK libs).

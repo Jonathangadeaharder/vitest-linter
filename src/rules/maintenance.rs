@@ -1,4 +1,6 @@
-use crate::models::{Category, HookKind, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation};
+use crate::models::{
+    Category, HookKind, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation,
+};
 use crate::rules::Rule;
 
 pub struct NoAssertionRule;
@@ -498,9 +500,7 @@ impl Rule for MissingMockCleanupRule {
 
         let has_unstub = module.hook_calls.iter().any(|h| {
             (h.kind == HookKind::AfterEach || h.kind == HookKind::BeforeEach)
-                && h.vi_calls
-                    .iter()
-                    .any(|c| c == "vi.unstubAllGlobals")
+                && h.vi_calls.iter().any(|c| c == "vi.unstubAllGlobals")
         });
 
         let mut violations = Vec::new();
