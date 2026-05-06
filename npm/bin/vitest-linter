@@ -1,37 +1,61 @@
 #!/usr/bin/env node
 
 const { execFileSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+const BIN_NAME = 'vitest-linter';
 const platform = os.platform();
 const arch = os.arch();
 
-const platformMap = {
-  'darwin-x64': 'vitest-linter-darwin-x86_64',
+const optionalDepMap = {
+  'darwin-x64':   'vitest-linter-darwin-x86_64',
   'darwin-arm64': 'vitest-linter-darwin-arm64',
-  'linux-x64': 'vitest-linter-linux-x86_64',
-  'linux-arm64': 'vitest-linter-linux-arm64',
-  'win32-x64': 'vitest-linter-win32-x86_64',
-  'win32-arm64': 'vitest-linter-win32-arm64',
+  'linux-x64':    'vitest-linter-linux-x86_64',
+  'linux-arm64':  'vitest-linter-linux-arm64',
+  'win32-x64':    'vitest-linter-win32-x86_64',
+  'win32-arm64':  'vitest-linter-win32-arm64',
 };
 
 const key = `${platform}-${arch}`;
-const pkg = platformMap[key];
+const ext = platform === 'win32' ? '.exe' : '';
 
-if (!pkg) {
-  console.error(`Unsupported platform: ${key}`);
+function runBin(binPath) {
+  execFileSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+}
+
+function fail(msg) {
+  console.error(msg);
   process.exit(1);
 }
 
-try {
-  const binPath = require.resolve(`${pkg}/vitest-linter${platform === 'win32' ? '.exe' : ''}`);
-  execFileSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
-} catch (err) {
-  if (typeof err.status === 'number') {
-    process.exit(err.status);
+// 1) Try optionalDependency platform-specific package (cargo-dist approach)
+const pkg = optionalDepMap[key];
+if (pkg) {
+  try {
+    const binPath = require.resolve(`${pkg}/${BIN_NAME}${ext}`);
+    return runBin(binPath);
+  } catch (_) {
+    // optionalDep not installed — try next fallback
   }
-  console.error(`Failed to run vitest-linter for ${key}: ${err.message}`);
-  console.error(`Install the platform package: npm install ${pkg}`);
-  process.exit(1);
+}
+
+// 2) Try locally downloaded binary from postinstall.js
+const localBin = path.join(__dirname, `${BIN_NAME}-bin${ext}`);
+if (fs.existsSync(localBin)) {
+  return runBin(localBin);
+}
+
+// 3) Try globally installed vitest-linter on PATH
+try {
+  const which = require('child_process').execFileSync;
+  // which/where check isn't reliable cross-platform; just exec and catch
+  runBin(BIN_NAME);
+} catch (_) {
+  fail(
+    `vitest-linter binary not found for ${key}.\n` +
+    `Install via npm:  npm install ${pkg || 'vitest-linter'}\n` +
+    `Or via cargo:    cargo install vitest-linter\n`
+  );
 }
