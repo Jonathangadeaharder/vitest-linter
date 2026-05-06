@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation};
 
 /// Context passed to each rule during evaluation, including the active
 /// configuration and all modules in the current group.
@@ -21,21 +21,23 @@ impl Default for LintContext<'_> {
 
 /// Trait implemented by every lint rule.
 pub trait Rule {
-    /// Unique rule identifier (e.g. `VITEST-FLK-001`).
     fn id(&self) -> &'static str;
-    /// Human-readable rule name (e.g. `TimeoutRule`).
     fn name(&self) -> &'static str;
-    /// Default severity level for this rule.
     fn severity(&self) -> Severity;
-    /// Category this rule belongs to.
     fn category(&self) -> Category;
-    /// Evaluate the rule against a parsed module and return any violations.
     fn check(
         &self,
         module: &ParsedModule,
         ctx: &LintContext<'_>,
         graph: &ModuleGraph,
     ) -> Vec<Violation>;
+
+    /// Whether this rule should fire for the given test runtime.
+    /// Default: only Vitest/Unknown (not Playwright).
+    /// Override to `true` for rules that apply to both runtimes.
+    fn applies_to_runtime(&self, runtime: TestRuntime) -> bool {
+        runtime != TestRuntime::Playwright
+    }
 }
 
 pub mod consistency;
@@ -43,8 +45,10 @@ pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
 pub mod no_rules;
+pub mod playwright;
 pub mod prefer;
 pub mod require;
+pub mod selector_classifier;
 pub mod validation;
 
 #[must_use]
@@ -106,6 +110,20 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(consistency::ConsistentTestItRule),
         Box::new(consistency::ConsistentVitestViRule),
         Box::new(consistency::HoistedApisOnTopRule),
+        // Playwright rules
+        Box::new(playwright::PwWaitForTimeoutRule),
+        Box::new(playwright::PwCssIdSelectorRule),
+        Box::new(playwright::PwXPathSelectorRule),
+        Box::new(playwright::PwLocatorNthRule),
+        Box::new(playwright::PwPageDollarRule),
+        Box::new(playwright::PwEvaluateInnerTextRule),
+        Box::new(playwright::PwArbitrarySleepRule),
+        Box::new(playwright::PwHardCssClassChainRule),
+        Box::new(playwright::PwDuplicateSpecFileRule),
+        Box::new(playwright::PwTextAssertionOverRoleRule),
+        Box::new(playwright::PwTestIdOverSemanticRoleRule),
+        Box::new(playwright::PwMissingWebFirstAssertionRule),
+        Box::new(playwright::PwMissingAxeScanRule),
     ]
 }
 
@@ -116,7 +134,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 52);
+        assert_eq!(rules.len(), 65);
     }
 
     #[test]

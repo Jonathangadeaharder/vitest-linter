@@ -2,6 +2,37 @@ use crate::config::matches_path;
 use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
 use crate::rules::{LintContext, Rule};
 
+const STABLE_DEP_SUFFIXES: &[&str] = &[
+    ".model.ts", ".model.js",
+    ".util.ts", ".utils.ts", ".util.js", ".utils.js",
+    ".lib.ts", ".lib.js", ".lib",
+    ".helper.ts", ".helpers.ts", ".helper.js", ".helpers.js",
+    ".config.ts", ".config.js",
+    ".constant.ts", ".constants.ts", ".constant.js", ".constants.js",
+];
+
+const STABLE_DEP_SEGMENTS: &[&str] = &[
+    "/models/",
+    "/utils/",
+    "/lib/",
+    "/helpers/",
+    "/constants/",
+];
+
+/// Returns `true` if the module source path looks like a stable dependency
+/// (pure functions, data models, configs — not I/O, API, or SDK libs).
+fn is_stable_dep(source: &str) -> bool {
+    if source.starts_with("node:") || source.starts_with("node_modules") {
+        return false;
+    }
+    if !source.starts_with('.') && !source.starts_with('/') {
+        return false;
+    }
+    let lower = source.to_lowercase();
+    STABLE_DEP_SUFFIXES.iter().any(|s| lower.ends_with(s))
+        || STABLE_DEP_SEGMENTS.iter().any(|s| lower.contains(s))
+}
+
 pub struct BannedModuleMockRule;
 
 impl Rule for BannedModuleMockRule {
@@ -24,20 +55,19 @@ impl Rule for BannedModuleMockRule {
         _graph: &ModuleGraph,
     ) -> Vec<Violation> {
         let banned = &ctx.config.deps.banned_mock_paths;
-        if banned.is_empty() {
-            return vec![];
-        }
         module
             .vi_mocks
             .iter()
-            .filter(|m| matches_path(banned, &m.source))
+            .filter(|m| {
+                matches_path(banned, &m.source) || is_stable_dep(&m.source)
+            })
             .map(|m| Violation {
                 rule_id: self.id().to_string(),
                 rule_name: self.name().to_string(),
                 severity: self.severity(),
                 category: self.category(),
                 message: format!(
-                    "vi.mock('{}') leaks across test files via singleton module cache",
+                    "vi.mock('{}') mocks a stable dependency — avoid mocking pure functions and data models",
                     m.source
                 ),
                 file_path: module.file_path.clone(),

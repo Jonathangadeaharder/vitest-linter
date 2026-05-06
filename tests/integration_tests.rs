@@ -3630,3 +3630,253 @@ test('subtract', () => { expect(subtract(5, 3)).toBe(2); });
         "MNT-010 should trigger: single production import, test names match export names"
     );
 }
+
+#[test]
+fn mnt007_playwright_test_only() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-only.spec.ts",
+        r#"
+import { test, expect } from '@playwright/test';
+
+test.only('focused pw test', async ({ page }) => {
+    await expect(page).toHaveTitle(/app/);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 for Playwright test.only"
+    );
+    assert_eq!(v.unwrap().rule_name, "FocusedTestRule");
+}
+
+#[test]
+fn mnt007_playwright_describe_only() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-describe-only.spec.ts",
+        r#"
+import { test, expect } from '@playwright/test';
+
+test.describe.only('focused group', () => {
+    test('inside', async ({ page }) => {
+        await expect(page).toHaveTitle(/app/);
+    });
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-007");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-007 for Playwright describe.only"
+    );
+}
+
+#[test]
+fn vitest_rules_do_not_fire_on_playwright_files() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-clean.spec.ts",
+        r#"
+import { test, expect } from '@playwright/test';
+
+test('clean pw test', async ({ page }) => {
+    await expect(page).toHaveTitle(/app/);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let vitest_only_rule_ids = [
+        "VITEST-FLK-001",
+        "VITEST-FLK-002",
+        "VITEST-MNT-002",
+        "VITEST-MNT-003",
+        "VITEST-MNT-004",
+        "VITEST-MNT-008",
+        "VITEST-MNT-009",
+        "VITEST-DEP-001",
+        "VITEST-PREF-003",
+    ];
+    for rule_id in &vitest_only_rule_ids {
+        assert!(
+            find_violation(&violations, rule_id).is_none(),
+            "Vitest-only rule {} should not fire on Playwright file",
+            rule_id
+    );
+}
+
+#[test]
+fn cross_runtime_rules_fire_on_playwright() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-no-assert.spec.ts",
+        r#"
+import { test } from '@playwright/test';
+
+test('no assertions pw', async ({ page }) => {
+    await page.goto('/');
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_some(),
+        "NoAssertionRule should fire on Playwright files too"
+    );
+}
+
+#[test]
+fn mnt008_global_stub_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "global_stub.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+test('uses global fetch', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-008 for global.fetch stub without cleanup"
+    );
+}
+
+#[test]
+fn mnt008_vi_stub_global_without_unstub() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "stub_global.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+
+vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true })));
+
+test('uses stubbed fetch', () => {
+    expect(1).toBe(1);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-008 for vi.stubGlobal without vi.unstubAllGlobals"
+    );
+}
+}
+
+
+#[test]
+fn pw003_flags_xpath() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "xpath.spec.ts",
+        r#"
+import { test, expect } from '@playwright/test';
+
+test('xpath locator', async ({ page }) => {
+    const el = page.locator('//div[@id="app"]');
+    await expect(el).toBeVisible();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PW-003").is_some(),
+        "PW-003 should flag xpath= prefix in locator"
+    );
+}
+
+#[test]
+fn pw002_flags_css_id() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-css-id.spec.ts",
+        r#"
+import { test } from '@playwright/test';
+
+test('id selector', async ({ page }) => {
+    const el = page.locator('#login-button');
+    await expect(el).toBeVisible();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PW-002").is_some(),
+        "PW-002 should flag CSS ID selector"
+    );
+}
+
+#[test]
+fn pw006_flags_evaluate_inner_text() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-evaluate.spec.ts",
+        r#"
+import { test } from '@playwright/test';
+
+test('evaluate inner text', async ({ page }) => {
+    const text = await page.evaluate(() => document.body.innerText);
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PW-006").is_some(),
+        "PW-006 should flag page.evaluate with innerText"
+    );
+}
+
+#[test]
+fn pw011_flags_hard_css_chain() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-css-chain.spec.ts",
+        r#"
+import { test } from '@playwright/test';
+
+test('chained css selectors', async ({ page }) => {
+    const el = page.locator('.foo > .bar');
+    await expect(el).toBeVisible();
+});
+"#,
+    );
+    let engine = LintEngine::new().unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-PW-011").is_some(),
+        "PW-011 should flag hard CSS class chain"
+    );
+}

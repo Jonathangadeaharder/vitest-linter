@@ -1,8 +1,6 @@
-use crate::models::{Category, HookKind, ModuleGraph, ParsedModule, Severity, Violation};
+use crate::models::{Category, HookKind, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation};
 use crate::rules::Rule;
 
-/// Flags tests that contain no `expect()` assertions — they pass even if
-/// the code under test is broken.
 pub struct NoAssertionRule;
 
 impl Rule for NoAssertionRule {
@@ -17,6 +15,9 @@ impl Rule for NoAssertionRule {
     }
     fn category(&self) -> Category {
         Category::Maintenance
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
     }
     fn check(
         &self,
@@ -206,6 +207,9 @@ impl Rule for EmptyTestRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
     fn check(
         &self,
         module: &ParsedModule,
@@ -394,6 +398,9 @@ impl Rule for FocusedTestRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
     fn check(
         &self,
         module: &ParsedModule,
@@ -475,7 +482,10 @@ impl Rule for MissingMockCleanupRule {
         _ctx: &crate::rules::LintContext<'_>,
         _graph: &ModuleGraph,
     ) -> Vec<Violation> {
-        if module.vi_mocks.is_empty() {
+        let has_vi_mocks = !module.vi_mocks.is_empty();
+        let has_global_stubs = !module.global_stubs.is_empty();
+
+        if !has_vi_mocks && !has_global_stubs {
             return vec![];
         }
 
@@ -486,34 +496,63 @@ impl Rule for MissingMockCleanupRule {
                     .any(|c| MOCK_CLEANUP_CALLS.iter().any(|mc| c == mc))
         });
 
-        if has_cleanup {
-            return vec![];
+        let has_unstub = module.hook_calls.iter().any(|h| {
+            (h.kind == HookKind::AfterEach || h.kind == HookKind::BeforeEach)
+                && h.vi_calls
+                    .iter()
+                    .any(|c| c == "vi.unstubAllGlobals")
+        });
+
+        let mut violations = Vec::new();
+
+        if has_vi_mocks && !has_cleanup {
+            let first_mock = module.vi_mocks.iter().min_by_key(|m| m.line);
+            if let Some(mock) = first_mock {
+                violations.push(Violation {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: self.severity(),
+                    category: self.category(),
+                    message: format!(
+                        "vi.mock('{}') used without afterEach cleanup — mocks may leak between tests",
+                        mock.source
+                    ),
+                    file_path: module.file_path.clone(),
+                    line: mock.line,
+                    col: None,
+                    suggestion: Some(
+                        "Add afterEach(() => { vi.restoreAllMocks() }) or beforeEach(() => { vi.clearAllMocks() }) to clean up mocks between tests"
+                            .to_string(),
+                    ),
+                    test_name: None,
+                });
+            }
         }
 
-        // Report once per file (on first vi.mock line)
-        let first_mock = module.vi_mocks.iter().min_by_key(|m| m.line);
-        if let Some(mock) = first_mock {
-            vec![Violation {
-                rule_id: self.id().to_string(),
-                rule_name: self.name().to_string(),
-                severity: self.severity(),
-                category: self.category(),
-                message: format!(
-                    "vi.mock('{}') used without afterEach cleanup — mocks may leak between tests",
-                    mock.source
-                ),
-                file_path: module.file_path.clone(),
-                line: mock.line,
-                col: None,
-                suggestion: Some(
-                    "Add afterEach(() => { vi.restoreAllMocks() }) or beforeEach(() => { vi.clearAllMocks() }) to clean up mocks between tests"
-                        .to_string(),
-                ),
-                test_name: None,
-            }]
-        } else {
-            vec![]
+        if has_global_stubs && !has_cleanup && !has_unstub {
+            let first_stub = module.global_stubs.iter().min_by_key(|s| s.line);
+            if let Some(stub) = first_stub {
+                violations.push(Violation {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: self.severity(),
+                    category: self.category(),
+                    message: format!(
+                        "global.{} stub without cleanup — may leak between tests",
+                        stub.target
+                    ),
+                    file_path: module.file_path.clone(),
+                    line: stub.line,
+                    col: None,
+                    suggestion: Some(
+                        "Add afterEach(() => { vi.unstubAllGlobals() }) or restore the original value manually".to_string(),
+                    ),
+                    test_name: None,
+                });
+            }
         }
+
+        violations
     }
 }
 
@@ -653,7 +692,7 @@ impl Rule for ImplementationCoupledRule {
 
         // Check ratio: test count should be within 0.8–1.2 of export count.
         let ratio = test_count as f64 / export_count as f64;
-        if ratio < 0.8 || ratio > 1.2 {
+        if !(0.8..=1.2).contains(&ratio) {
             return vec![];
         }
 
@@ -745,6 +784,9 @@ mod tests {
             expects_outside_tests: vec![],
             imports_node_test: false,
             snapshot_sizes: vec![],
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         }
     }
 
