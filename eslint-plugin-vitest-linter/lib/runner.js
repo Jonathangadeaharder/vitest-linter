@@ -1,5 +1,6 @@
 const { execFileSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const cache = new Map();
 
@@ -28,11 +29,19 @@ function getBinary() {
 
 function getViolations(filePath) {
   const normalized = path.resolve(filePath);
-  if (cache.has(normalized)) {
-    return cache.get(normalized);
+  let mtime = 0;
+  try {
+    mtime = fs.statSync(normalized).mtimeMs;
+  } catch {
+    // File might not be accessible
+  }
+  const cacheKey = `${normalized}:${mtime}`;
+
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
   }
 
-  let violations = [];
+  const violations = {};
   try {
     const bin = getBinary();
     const result = execFileSync(bin, ["--format", "json", normalized], {
@@ -40,12 +49,16 @@ function getViolations(filePath) {
       maxBuffer: 10 * 1024 * 1024,
       timeout: 30000,
     });
-    violations = JSON.parse(result);
+    const raw = JSON.parse(result);
+    for (const v of raw) {
+      if (!violations[v.rule_id]) violations[v.rule_id] = [];
+      violations[v.rule_id].push(v);
+    }
   } catch {
-    violations = [];
+    // Return empty map on error
   }
 
-  cache.set(normalized, violations);
+  cache.set(cacheKey, violations);
   return violations;
 }
 

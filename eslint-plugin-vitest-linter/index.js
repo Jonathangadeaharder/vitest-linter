@@ -12,18 +12,16 @@ for (const def of ruleDefinitions) {
         description: def.description,
         category: "Test Smells",
         recommended: true,
-        url: `https://github.com/Jonathangadeaharder/vitest-linter#rule-${def.ruleId.toLowerCase()}`,
+        url: `https://github.com/Jonathangadeaharder/vitest-linter#${def.ruleId.toLowerCase()}`,
       },
       schema: [],
     },
     create(context) {
-      const filePath = context.getFilename();
+      const filePath = context.filename ?? context.getFilename();
       return {
         Program() {
-          const violations = getViolations(filePath);
-          const matched = violations.filter(
-            (v) => v.rule_id === def.ruleId,
-          );
+          const violationsMap = getViolations(filePath);
+          const matched = violationsMap[def.ruleId] || [];
           for (const v of matched) {
             context.report({
               loc: {
