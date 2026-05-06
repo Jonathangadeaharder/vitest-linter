@@ -15,8 +15,7 @@ interface Violation {
   test_name: string | null;
 }
 
-const TEST_FILE_PATTERN =
-  /\.[tT]est\.[tT]s$|\.[tT]est\.[tT]s[xX]$|\.[tT]est\.[jJ]s$|\.[tT]est\.[jJ]s[xX]$|\.[sS]pec\.[tT]s$|\.[sS]pec\.[tT]s[xX]$|\.[sS]pec\.[jJ]s$|\.[sS]pec\.[jJ]s[xX]$/;
+const TEST_FILE_PATTERN = /\.(test|spec)\.[tj]sx?$/i;
 
 const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {
   Error: vscode.DiagnosticSeverity.Error,
@@ -26,6 +25,7 @@ const SEVERITY_MAP: Record<string, vscode.DiagnosticSeverity> = {
 
 let diagnosticCollection: vscode.DiagnosticCollection;
 let lintTimeout: ReturnType<typeof setTimeout> | undefined;
+const activeProcesses = new Map<string, import("node:child_process").ChildProcess>();
 
 export function activate(context: vscode.ExtensionContext): void {
   diagnosticCollection =
@@ -168,14 +168,26 @@ function lintDocument(doc: vscode.TextDocument): void {
 
   const args = ["--format", "json", "--no-color", filePath];
 
-  execFile(
+  const existing = activeProcesses.get(filePath);
+  if (existing) {
+    existing.kill();
+  }
+
+  const proc = execFile(
     config.executablePath,
     args,
     { cwd, timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
     (err, stdout) => {
+      activeProcesses.delete(filePath);
       if (err && err.code !== 1 && !stdout) {
-        const msg = `vitest-linter: ${err.message}`;
-        void vscode.window.setStatusBarMessage(msg, 5000);
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+          void vscode.window.showErrorMessage(
+            `vitest-linter: executable not found at "${config.executablePath}". Install it or set vitest-linter.executablePath.`,
+          );
+        } else {
+          const msg = `vitest-linter: ${err.message}`;
+          void vscode.window.setStatusBarMessage(msg, 5000);
+        }
         return;
       }
 
@@ -230,9 +242,8 @@ function lintDocument(doc: vscode.TextDocument): void {
       diagnosticCollection.set(doc.uri, diagnostics);
     },
   );
-}
-
-function lintWorkspace(): void {
+  activeProcesses.set(filePath, proc);
+}(): void {
   const config = getConfig();
   if (!config.enable) {
     return;
@@ -243,6 +254,12 @@ function lintWorkspace(): void {
     return;
   }
 
+  diagnosticCollection.clear();
+
+  let totalCount = 0;
+  let totalErrors = 0;
+  let pending = folders.length;
+
   for (const folder of folders) {
     const cwd = folder.uri.fsPath;
     const args = ["--format", "json", "--no-color", "."];
@@ -252,10 +269,16 @@ function lintWorkspace(): void {
       args,
       { cwd, timeout: 60_000, maxBuffer: 50 * 1024 * 1024 },
       (err, stdout) => {
+        pending--;
         if (err && err.code !== 1 && !stdout) {
           void vscode.window.showErrorMessage(
             `vitest-linter workspace lint failed: ${err.message}`,
           );
+          if (pending === 0) {
+            void vscode.window.showInformationMessage(
+              `Vitest Linter: ${totalCount} violation(s) (${totalErrors} error${totalErrors !== 1 ? "s" : ""})`,
+            );
+          }
           return;
         }
 
@@ -263,12 +286,36 @@ function lintWorkspace(): void {
         try {
           violations = JSON.parse(stdout || "[]") as Violation[];
         } catch {
+          if (pending === 0) {
+            void vscode.window.showInformationMessage(
+              `Vitest Linter: ${totalCount} violation(s) (${totalErrors} error${totalErrors !== 1 ? "s" : ""})`,
+            );
+          }
           return;
         }
+
+        totalCount += violations.length;
+        totalErrors += violations.filter((v) => v.severity === "Error").length;
 
         const byFile = new Map<string, Violation[]>();
         for (const v of violations) {
           const absPath = path.resolve(cwd, v.file_path);
+          const relPath = path.relative(cwd, absPath);
+
+          let excluded = false;
+          for (const pattern of config.exclude) {
+            if (matchGlob(relPath, pattern)) {
+              excluded = true;
+              break;
+            }
+          }
+          if (excluded) continue;
+
+          if (config.include.length > 0) {
+            const included = config.include.some((p) => matchGlob(relPath, p));
+            if (!included) continue;
+          }
+
           const existing = byFile.get(absPath);
           if (existing) {
             existing.push(v);
@@ -276,8 +323,6 @@ function lintWorkspace(): void {
             byFile.set(absPath, [v]);
           }
         }
-
-        diagnosticCollection.clear();
 
         for (const [absPath, fileViolations] of byFile) {
           const uri = vscode.Uri.file(absPath);
@@ -315,11 +360,11 @@ function lintWorkspace(): void {
           diagnosticCollection.set(uri, diagnostics);
         }
 
-        const count = violations.length;
-        const errors = violations.filter((v) => v.severity === "Error").length;
-        void vscode.window.showInformationMessage(
-          `Vitest Linter: ${count} violation(s) (${errors} error${errors !== 1 ? "s" : ""})`,
-        );
+        if (pending === 0) {
+          void vscode.window.showInformationMessage(
+            `Vitest Linter: ${totalCount} violation(s) (${totalErrors} error${totalErrors !== 1 ? "s" : ""})`,
+          );
+        }
       },
     );
   }
