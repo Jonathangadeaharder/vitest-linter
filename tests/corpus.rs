@@ -121,7 +121,12 @@ fn clone_or_update_project(project: &CorpusProject) -> PathBuf {
             .current_dir(&cache)
             .status()
             .expect("git checkout failed");
-        assert!(status.success(), "git checkout of {} failed for {}", project.commit, project.name);
+        assert!(
+            status.success(),
+            "git checkout of {} failed for {}",
+            project.commit,
+            project.name
+        );
     }
 
     cache
