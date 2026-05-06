@@ -161,9 +161,7 @@ fn count_test_files(dir: &Path) -> usize {
         .count()
 }
 
-fn summarize_violations(
-    violations: &[vitest_linter::models::Violation],
-) -> HashMap<String, usize> {
+fn summarize_violations(violations: &[vitest_linter::models::Violation]) -> HashMap<String, usize> {
     let mut counts: HashMap<String, usize> = HashMap::new();
     for v in violations {
         *counts.entry(v.rule_id.clone()).or_default() += 1;
@@ -171,10 +169,7 @@ fn summarize_violations(
     counts
 }
 
-fn assert_no_panic(
-    result: &(Vec<vitest_linter::models::Violation>, usize),
-    project_name: &str,
-) {
+fn assert_no_panic(result: &(Vec<vitest_linter::models::Violation>, usize), project_name: &str) {
     assert!(
         !result.0.is_empty() || result.1 > 0,
         "[{}] Linter returned 0 violations from {} test files — this likely means files were not discovered",
@@ -191,7 +186,9 @@ fn print_summary(
     let counts = summarize_violations(violations);
     eprintln!(
         "\n[{}] {} files, {} violations:",
-        project_name, file_count, violations.len()
+        project_name,
+        file_count,
+        violations.len()
     );
     let mut sorted: Vec<_> = counts.iter().collect();
     sorted.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
