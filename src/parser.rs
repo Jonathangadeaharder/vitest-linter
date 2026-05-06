@@ -3,8 +3,9 @@ use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 use crate::models::{
-    DescribeBlock, ExpectOutsideTest, ExportEntry, ExportKind, HookCall, HookKind, ImportEntry,
-    MockScope, ParsedModule, SnapshotSize, TestBlock, ViMockCall,
+    DescribeBlock, ExpectOutsideTest, ExportEntry, ExportKind, GlobalStub, HookCall, HookKind,
+    ImportEntry, LocatorChain, MockScope, ParsedModule, PlaywrightCall, PlaywrightModule,
+    SnapshotSize, TestBlock, TestRuntime, ViMockCall,
 };
 
 /// Tree-sitter-based TypeScript/TSX parser that extracts test metadata from
@@ -22,6 +23,9 @@ struct Context {
     expects_outside_tests: Vec<ExpectOutsideTest>,
     imports_node_test: bool,
     snapshot_sizes: Vec<SnapshotSize>,
+    runtime: TestRuntime,
+    playwright_module: Option<PlaywrightModule>,
+    global_stubs: Vec<GlobalStub>,
 }
 
 impl TsParser {
@@ -76,6 +80,9 @@ impl TsParser {
             imports_node_test: ctx.imports_node_test,
             snapshot_sizes: ctx.snapshot_sizes,
             exports,
+            runtime: ctx.runtime,
+            playwright: ctx.playwright_module,
+            global_stubs: ctx.global_stubs,
         })
     }
 
@@ -99,14 +106,91 @@ impl TsParser {
                         if entry.source == "node:test" {
                             ctx.imports_node_test = true;
                         }
+                        if entry.source == "@playwright/test" {
+                            ctx.runtime = TestRuntime::Playwright;
+                            ctx.playwright_module = Some(PlaywrightModule::default());
+                        } else if entry.source.starts_with("vitest")
+                            && ctx.runtime == TestRuntime::Unknown
+                        {
+                            ctx.runtime = TestRuntime::Vitest;
+                        }
+                        if entry.source == "axe-playwright"
+                            || entry.source == "@axe-core/playwright"
+                        {
+                            if let Some(ref mut pw) = ctx.playwright_module {
+                                pw.uses_axe = true;
+                            }
+                        }
                         ctx.imports_parsed.push(entry);
                     }
                 }
                 "call_expression" => {
                     Self::handle_call(child, source, path, describe_depth, scope, ctx);
                 }
+                "expression_statement" => {
+                    Self::collect_global_stub_assignment(&child, source, ctx);
+                    Self::collect(child, source, path, describe_depth, scope, ctx);
+                }
+                "lexical_declaration" | "variable_declaration" => {
+                    Self::collect_global_stub_declaration(&child, source, ctx);
+                    Self::collect(child, source, path, describe_depth, scope, ctx);
+                }
                 _ => {
                     Self::collect(child, source, path, describe_depth, scope, ctx);
+                }
+            }
+        }
+    }
+
+    fn collect_global_stub_assignment(node: &Node, source: &str, ctx: &mut Context) {
+        for i in 0..node.named_child_count() {
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            if child.kind() == "assignment_expression" {
+                let text = child.utf8_text(source.as_bytes()).unwrap_or("");
+                let lhs = text.split('=').next().unwrap_or("").trim();
+                if lhs.starts_with("global.") || lhs.starts_with("globalThis.") {
+                    let target_name = lhs
+                        .strip_prefix("global.")
+                        .or_else(|| lhs.strip_prefix("globalThis."))
+                        .unwrap_or(lhs)
+                        .trim()
+                        .to_string();
+                    ctx.global_stubs.push(GlobalStub {
+                        target: target_name,
+                        line: node.start_position().row + 1,
+                    });
+                }
+            }
+        }
+    }
+
+    fn collect_global_stub_declaration(node: &Node, source: &str, ctx: &mut Context) {
+        for i in 0..node.named_child_count() {
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            if child.kind() == "variable_declarator" {
+                let text = child.utf8_text(source.as_bytes()).unwrap_or("");
+                if text.contains("vi.fn()") || text.contains("vi.fn(") {
+                    if let Some(name_node) = child.child_by_field_name("name") {
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or("")
+                            .to_string();
+                        if name.starts_with("global.") || name.starts_with("globalThis.") {
+                            let target_name = name
+                                .strip_prefix("global.")
+                                .or_else(|| name.strip_prefix("globalThis."))
+                                .unwrap_or(&name)
+                                .to_string();
+                            ctx.global_stubs.push(GlobalStub {
+                                target: target_name,
+                                line: node.start_position().row + 1,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -164,6 +248,25 @@ impl TsParser {
             if let Some(entry) = Self::extract_vi_mock(node, source, scope) {
                 ctx.vi_mocks.push(entry);
             }
+        }
+
+        // vi.stubGlobal(name, ...) — records global stub without cleanup
+        if full_callee == "vi.stubGlobal" {
+            if let Some(args) = node.child_by_field_name("arguments") {
+                if let Some(first) = args.named_child(0) {
+                    if let Some(target) = Self::string_value(first, source) {
+                        ctx.global_stubs.push(GlobalStub {
+                            target,
+                            line: node.start_position().row + 1,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Playwright-specific call tracking
+        if ctx.runtime == TestRuntime::Playwright {
+            Self::track_playwright_call(&full_callee, node, source, ctx);
         }
 
         match func_name.as_str() {
@@ -371,6 +474,87 @@ impl TsParser {
                     }
                     _ => {}
                 }
+            }
+        }
+    }
+
+    fn track_playwright_call(full_callee: &str, node: Node, source: &str, ctx: &mut Context) {
+        let pw_module = match &mut ctx.playwright_module {
+            Some(m) => m,
+            None => return,
+        };
+
+        let line = node.start_position().row + 1;
+
+        let tracked_calls = [
+            "waitForTimeout",
+            "page.$",
+            "page.$$",
+            ".nth",
+            ".xpath",
+            "setTimeout",
+        ];
+        for tc in &tracked_calls {
+            if full_callee.contains(tc) {
+                let raw_arg = if let Some(args) = node.child_by_field_name("arguments") {
+                    args.named_child(0)
+                        .and_then(|a| Self::string_value(a, source))
+                } else {
+                    None
+                };
+                pw_module.calls.push(PlaywrightCall {
+                    call_name: full_callee.to_string(),
+                    line,
+                    raw_arg,
+                });
+                break;
+            }
+        }
+
+        // Track evaluate innerText
+        if full_callee.contains("evaluate") {
+            let text = node.utf8_text(source.as_bytes()).unwrap_or("");
+            if text.contains("innerText") {
+                pw_module.evaluate_inner_text.push(line);
+            }
+        }
+
+        // Track axe usage
+        if full_callee.contains("injectAxe")
+            || full_callee.contains("checkA11y")
+            || full_callee.contains("AxeBuilder")
+        {
+            pw_module.uses_axe = true;
+        }
+
+        // Track locator chains
+        let locator_roots = [
+            "getByRole",
+            "getByText",
+            "getByTestId",
+            "getByPlaceholder",
+            "getByLabel",
+            "getByAltText",
+            "getByTitle",
+            "locator",
+            "page.locator",
+        ];
+        for root in &locator_roots {
+            if full_callee.contains(root) {
+                let raw_arg = if let Some(args) = node.child_by_field_name("arguments") {
+                    args.named_child(0)
+                        .and_then(|a| Self::string_value(a, source))
+                } else {
+                    None
+                };
+                let method = full_callee.split('.').next_back().unwrap_or("").to_string();
+                pw_module.locator_chains.push(LocatorChain {
+                    root: root.to_string(),
+                    raw_arg,
+                    method,
+                    line,
+                });
+                break;
             }
         }
     }
@@ -842,6 +1026,14 @@ impl TsParser {
                 if ctor.utf8_text(source.as_bytes()).unwrap_or("") == "Date" {
                     st.uses_datemock = true;
                 }
+                // Traverse constructor arguments for nested call expressions
+                // (e.g. new Promise(r => setTimeout(r, N)))
+                if let Some(args) = node.child_by_field_name("arguments") {
+                    for i in 0..args.named_child_count() {
+                        let child = args.named_child(i).unwrap();
+                        Self::walk_body(child, source, st);
+                    }
+                }
             }
             "if_statement" | "switch_statement" => {
                 st.has_conditional = true;
@@ -948,7 +1140,15 @@ impl TsParser {
         None
     }
 
-    const WEAK_MATCHERS: &[&str] = &["toBeDefined", "toBeUndefined", "toBeTruthy", "toBeFalsy"];
+    const WEAK_MATCHERS: &[&str] = &[
+        "toBeDefined",
+        "toBeUndefined",
+        "toBeTruthy",
+        "toBeFalsy",
+        "toBeNull",
+        "toMatchObject",
+        "toHaveProperty",
+    ];
 
     /// Check if a subtree contains an `expect()` call.
     fn contains_expect_call(node: Node, source: &str) -> bool {
@@ -1593,6 +1793,144 @@ test('not toThrow', () => {
             module.test_blocks[0].weak_assertion_count > 0,
             "not.toThrow() should be detected as weak assertion, weak_assertion_count={}",
             module.test_blocks[0].weak_assertion_count
+        );
+    }
+
+    #[test]
+    fn parse_detects_playwright_runtime_from_import() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from '@playwright/test';
+
+test('pw test', async ({ page }) => {
+    await expect(page).toHaveTitle(/app/);
+});
+"#,
+            "pw.spec.ts",
+        );
+        let path = dir.path().join("pw.spec.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.runtime, TestRuntime::Playwright);
+        assert!(module.playwright.is_some());
+    }
+
+    #[test]
+    fn parse_detects_vitest_runtime() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from 'vitest';
+
+test('vitest test', () => {
+    expect(1).toBe(1);
+});
+"#,
+            "vitest.test.ts",
+        );
+        let path = dir.path().join("vitest.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.runtime, TestRuntime::Vitest);
+    }
+
+    #[test]
+    fn parse_detects_global_fetch_stub() {
+        let dir = write_temp(
+            r#"
+import { vi, test } from 'vitest';
+
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+test('test', () => {
+    expect(1).toBe(1);
+});
+"#,
+            "global_stub.test.ts",
+        );
+        let path = dir.path().join("global_stub.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert!(
+            !module.global_stubs.is_empty(),
+            "Expected global.fetch stub to be detected"
+        );
+        assert!(module.global_stubs.iter().any(|s| s.target == "fetch"));
+    }
+
+    #[test]
+    fn parse_detects_vi_stub_global() {
+        let dir = write_temp(
+            r#"
+import { vi, test } from 'vitest';
+
+vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ json: () => ({}) })));
+"#,
+            "stub_global.test.ts",
+        );
+        let path = dir.path().join("stub_global.test.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert!(
+            !module.global_stubs.is_empty(),
+            "Expected vi.stubGlobal to be detected"
+        );
+        assert_eq!(module.global_stubs[0].target, "fetch");
+    }
+
+    #[test]
+    fn parse_detects_axe_modules() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from '@playwright/test';
+import { injectAxe, checkA11y } from 'axe-playwright';
+
+test('a11y', async ({ page }) => {
+    await injectAxe(page);
+    await checkA11y(page);
+});
+"#,
+            "a11y.spec.ts",
+        );
+        let path = dir.path().join("a11y.spec.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.runtime, TestRuntime::Playwright);
+        let pw = module.playwright.as_ref().unwrap();
+        assert!(
+            pw.uses_axe,
+            "Expected axe detection from axe-playwright import"
+        );
+    }
+
+    #[test]
+    fn parse_detects_playwright_wait_for_timeout() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from '@playwright/test';
+
+test('with waitForTimeout', async ({ page }) => {
+    await page.waitForTimeout(5000);
+    await expect(page).toHaveTitle('app');
+});
+"#,
+            "wait_for_timeout.spec.ts",
+        );
+        let path = dir.path().join("wait_for_timeout.spec.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        let pw = module.playwright.as_ref().unwrap();
+        assert!(
+            pw.calls
+                .iter()
+                .any(|c| c.call_name.contains("waitForTimeout")),
+            "Expected waitForTimeout call to be tracked"
         );
     }
 }

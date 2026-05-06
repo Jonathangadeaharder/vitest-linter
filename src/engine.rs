@@ -131,6 +131,9 @@ impl LintEngine {
                     continue;
                 }
                 for (local_idx, module) in group_modules.iter().enumerate() {
+                    if !rule.applies_to_runtime(module.runtime) {
+                        continue;
+                    }
                     let global_idx = indices[local_idx];
                     let mut v = rule.check(module, &ctx, &graph);
                     if let Some(override_sev) = config.rules.severity_override(rule.id()) {

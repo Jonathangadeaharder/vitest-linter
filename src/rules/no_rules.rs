@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
+use crate::models::{Category, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation};
 use crate::rules::Rule;
 
 // ---------------------------------------------------------------------------
@@ -65,6 +65,9 @@ impl Rule for NoIdenticalTitleRule {
     }
     fn category(&self) -> Category {
         Category::Structure
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
     }
     fn check(
         &self,

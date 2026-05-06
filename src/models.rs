@@ -19,6 +19,45 @@ pub enum Category {
     Structure,
     Dependencies,
     Validation,
+    Playwright,
+}
+
+/// Runtime that the test file targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+pub enum TestRuntime {
+    #[default]
+    Unknown,
+    Vitest,
+    Playwright,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PlaywrightCall {
+    pub call_name: String,
+    pub line: usize,
+    pub raw_arg: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LocatorChain {
+    pub root: String,
+    pub raw_arg: Option<String>,
+    pub method: String,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PlaywrightModule {
+    pub calls: Vec<PlaywrightCall>,
+    pub locator_chains: Vec<LocatorChain>,
+    pub evaluate_inner_text: Vec<usize>,
+    pub uses_axe: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalStub {
+    pub target: String,
+    pub line: usize,
 }
 
 /// A single lint violation found by a rule.
@@ -58,6 +97,14 @@ mod tests {
         assert_ne!(Category::Flakiness, Category::Maintenance);
         assert_ne!(Category::Maintenance, Category::Structure);
         assert_ne!(Category::Flakiness, Category::Structure);
+        assert_ne!(Category::Playwright, Category::Maintenance);
+    }
+
+    #[test]
+    fn test_runtime_values() {
+        assert_ne!(TestRuntime::Vitest, TestRuntime::Playwright);
+        assert_ne!(TestRuntime::Playwright, TestRuntime::Unknown);
+        assert_ne!(TestRuntime::Vitest, TestRuntime::Unknown);
     }
 }
 
@@ -105,7 +152,7 @@ pub struct DescribeBlock {
     pub is_async: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ParsedModule {
     pub file_path: PathBuf,
     pub imports: Vec<String>,
@@ -119,6 +166,9 @@ pub struct ParsedModule {
     pub imports_node_test: bool,
     pub snapshot_sizes: Vec<SnapshotSize>,
     pub exports: Vec<ExportEntry>,
+    pub runtime: TestRuntime,
+    pub playwright: Option<PlaywrightModule>,
+    pub global_stubs: Vec<GlobalStub>,
 }
 
 #[derive(Debug, Clone)]

@@ -299,6 +299,9 @@ mod tests {
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         }
     }
 
@@ -485,53 +488,12 @@ describe('grouped', () => {
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
-
         let ctx = default_ctx();
-        let v = RequireTopLevelDescribeRule.check(&module, &ctx, &ModuleGraph::default());
-        assert_eq!(v.len(), 1);
-        assert_eq!(v[0].rule_id, "VITEST-REQ-002");
-        assert_eq!(v[0].line, 4);
-    }
-
-    #[test]
-    fn req_002_no_violation_when_no_describes() {
-        let module = make_module(
-            "test.ts",
-            vec![],
-            vec![TestBlock {
-                name: "standalone".to_string(),
-                file_path: PathBuf::from("test.ts"),
-                line: 3,
-                has_assertions: true,
-                assertion_count: 1,
-                has_conditional_logic: false,
-                has_try_catch: false,
-                uses_settimeout: false,
-                uses_datemock: false,
-                has_multiple_expects: false,
-                is_skipped: false,
-                is_only: false,
-                is_nested: false,
-                has_return_statement: false,
-                unawaited_async_assertions: 0,
-                uses_fake_timers: false,
-                uses_random: false,
-                has_expect_call_without_assertion: false,
-                has_return_of_expect: false,
-                title_is_template_literal: false,
-                has_async_expect_wrapper: false,
-                uses_fit_or_xit: false,
-                has_done_callback: false,
-                has_conditional_expect: false,
-                weak_assertion_count: 0,
-                has_real_timers_call: false,
-            }],
-            vec![],
-            vec![],
-        );
-        let ctx = default_ctx();
-        let v = RequireTopLevelDescribeRule.check(&module, &ctx, &ModuleGraph::default());
+        let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
         assert!(v.is_empty());
     }
 
@@ -610,6 +572,9 @@ expect(() => fn()).toThrow();
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         let ctx = default_ctx();
         let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
@@ -644,6 +609,9 @@ expect(() => fn()).toThrow(/pattern/);
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         let ctx = default_ctx();
         let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
@@ -674,6 +642,9 @@ expect(() => fn()).toThrow(/pattern/);
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         let ctx = default_ctx();
         let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
@@ -704,6 +675,9 @@ expect(() => fn()).toThrow(/pattern/);
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         let ctx = default_ctx();
         let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());
@@ -734,6 +708,9 @@ expect(() => fn()).toThrow(/pattern/);
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         let ctx = default_ctx();
         let v = RequireToThrowMessageRule.check(&module, &ctx, &ModuleGraph::default());

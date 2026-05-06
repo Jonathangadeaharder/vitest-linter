@@ -230,6 +230,9 @@ mod tests {
             imports_node_test: false,
             snapshot_sizes: vec![],
             exports: Vec::new(),
+            runtime: crate::models::TestRuntime::Unknown,
+            playwright: None,
+            global_stubs: vec![],
         };
         TempModule { _dir: dir, module }
     }
