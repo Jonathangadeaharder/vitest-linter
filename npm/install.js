@@ -59,6 +59,7 @@ function download(url, dest) {
           }
           const stream = fs.createWriteStream(dest);
           res.pipe(stream);
+          res.on("error", reject);
           stream.on("finish", () => {
             stream.close();
             resolve();
@@ -131,7 +132,7 @@ async function main() {
     console.warn(`Prebuilt binary download failed: ${err.message}`);
     console.warn("Falling back to cargo install...");
     try {
-      execSync("cargo install vitest-linter --locked", { stdio: "inherit" });
+      execSync(`cargo install vitest-linter --version ${version} --locked`, { stdio: "inherit" });
       const cargoHome =
         process.env.CARGO_HOME || path.join(os.homedir(), ".cargo");
       const cargoBin =
@@ -154,4 +155,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

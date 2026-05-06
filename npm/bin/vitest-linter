@@ -22,7 +22,14 @@ const key = `${platform}-${arch}`;
 const ext = platform === 'win32' ? '.exe' : '';
 
 function runBin(binPath) {
-  execFileSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+  try {
+    execFileSync(binPath, process.argv.slice(2), { stdio: 'inherit' });
+  } catch (err) {
+    if (err.status !== undefined) {
+      process.exit(err.status);
+    }
+    throw err;
+  }
 }
 
 function fail(msg) {
@@ -49,7 +56,6 @@ if (fs.existsSync(localBin)) {
 
 // 3) Try globally installed vitest-linter on PATH
 try {
-  const which = require('child_process').execFileSync;
   // which/where check isn't reliable cross-platform; just exec and catch
   runBin(BIN_NAME);
 } catch (_) {
