@@ -1168,6 +1168,13 @@ impl TsParser {
         "toBeNull",
         "toMatchObject",
         "toHaveProperty",
+        "toHaveBeenCalled",
+        "toBeCalled",
+        "toHaveReturned",
+        "toHaveReturnedTimes",
+        "toBeGreaterThan",
+        "toBeLessThan",
+        "toBeCloseTo",
     ];
 
     /// Check if a subtree contains an `expect()` call.

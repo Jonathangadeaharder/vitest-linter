@@ -161,13 +161,22 @@ impl Rule for PreferToHaveLengthRule {
             let trimmed = line.trim();
             let has_expect = trimmed.contains("expect(");
             let has_length = trimmed.contains(".length)");
-            if has_expect && has_length {
+            let has_size = trimmed.contains(".size)")
+                && !trimmed.contains("window.size")
+                && !trimmed.contains("fontSize")
+                && !trimmed.contains("font-size");
+            if has_expect && (has_length || has_size) {
+                let message = if has_size && !has_length {
+                    "Use toHaveLength() instead of asserting on .size (Map/Set)"
+                } else {
+                    "Use toHaveLength() instead of asserting on .length"
+                };
                 violations.push(Violation {
                     rule_id: self.id().to_string(),
                     rule_name: self.name().to_string(),
                     severity: self.severity(),
                     category: self.category(),
-                    message: "Use toHaveLength() instead of asserting on .length".to_string(),
+                    message: message.to_string(),
                     file_path: module.file_path.clone(),
                     line: line_idx + 1,
                     col: None,

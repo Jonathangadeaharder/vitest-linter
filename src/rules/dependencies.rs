@@ -22,9 +22,35 @@ const STABLE_DEP_SUFFIXES: &[&str] = &[
     ".constants.ts",
     ".constant.js",
     ".constants.js",
+    ".types.ts",
+    ".types.js",
+    ".type.ts",
+    ".type.js",
+    ".d.ts",
+    ".schema.ts",
+    ".schema.js",
+    ".interface.ts",
+    ".interface.js",
+    ".enum.ts",
+    ".enum.js",
+    ".validator.ts",
+    ".validator.js",
+    ".dto.ts",
+    ".dto.js",
 ];
 
-const STABLE_DEP_SEGMENTS: &[&str] = &["/models/", "/utils/", "/lib/", "/helpers/", "/constants/"];
+const STABLE_DEP_SEGMENTS: &[&str] = &[
+    "/models/",
+    "/utils/",
+    "/lib/",
+    "/helpers/",
+    "/constants/",
+    "/types/",
+    "/schemas/",
+    "/interfaces/",
+    "/dto/",
+    "/validators/",
+];
 
 /// Returns `true` if the module source path looks like a stable dependency
 /// (pure functions, data models, configs — not I/O, API, or SDK libs).
