@@ -489,7 +489,6 @@ test('no assert', () => { const x = 1; });
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -526,7 +525,6 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -558,7 +556,6 @@ test('cond', () => { if (true) { expect(1).toBe(1); } });
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -601,7 +598,6 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -627,7 +623,6 @@ test('no assert', () => { const x = 1; });
     let output = std::process::Command::new(&bin)
         .arg(&test_path)
         .arg("--no-color")
-        .arg("--unstable-rules")
         .output()
         .unwrap();
 
@@ -1425,7 +1420,6 @@ test('timeout', () => {
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -1445,7 +1439,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true, false, true, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 
@@ -1467,7 +1461,6 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -1551,7 +1544,6 @@ test('no assert', () => { const x = 1; });
         Some(&output_path),
         false,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -1579,7 +1571,6 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         false,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -1714,7 +1705,6 @@ test('has if', () => {
         Some(&output_path),
         true,
         false,
-        true,
         "HEAD",
     )
     .unwrap();
@@ -1733,7 +1723,7 @@ import { test, expect } from 'vitest';
 test('clean', () => { expect(1).toBe(1); });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true, false, true, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
     assert!(!has_errors);
 }
 
@@ -1748,7 +1738,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "terminal", None, true, false, true, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", None, true, false, "HEAD").unwrap();
     assert!(has_errors);
 }
 
@@ -3918,6 +3908,84 @@ fn mnt007_playwright_fixture_violates() {
     assert_eq!(test_v[0].line, 9);
     assert_eq!(
         test_v[0].test_name.as_deref(),
-        Some("standalone focused test")
+        Some("standalone focused test"),
+    );
+}
+
+#[test]
+fn flk001_flags_promise_wrapped_settimeout() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "promise_settimeout.test.ts",
+        r#"
+import { vi, test, expect } from 'vitest';
+
+test('waits with promise setTimeout', async () => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    expect(true).toBe(true);
+});
+"#,
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-FLK-001");
+    assert!(
+        v.is_some(),
+        "FLK-001 should flag Promise-wrapped setTimeout"
+    );
+    if let Some(viol) = v {
+        assert!(
+            viol.message.contains("Promise"),
+            "FLK-001 message should mention Promise for wrapped setTimeout"
+        );
+    }
+}
+
+#[test]
+fn mnt011_flags_testid_without_negative_presence() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "testid_no_negative.spec.ts",
+        r#"
+import { test, expect } from '@playwright/test';
+
+test('finds element by testid', async ({ page }) => {
+    const el = page.getByTestId('submit-btn');
+    await expect(el).toBeVisible();
+});
+"#,
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-011");
+    assert!(
+        v.is_some(),
+        "MNT-011 should flag getByTestId without negative-presence assertion"
+    );
+}
+
+#[test]
+fn pref003_flags_size_on_map_set() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "size_assertion.test.ts",
+        r#"
+import { test, expect } from 'vitest';
+
+test('map size', () => {
+    const m = new Map();
+    expect(m.size).toBe(0);
+});
+"#,
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-PREF-003");
+    assert!(
+        v.is_some(),
+        "PREF-003 should flag .size assertion on Map/Set"
     );
 }

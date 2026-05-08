@@ -851,6 +851,7 @@ impl TsParser {
             has_conditional_logic: st.has_conditional,
             has_try_catch: st.has_try_catch,
             uses_settimeout: st.uses_settimeout,
+            uses_promise_settimeout: st.uses_promise_settimeout,
             uses_datemock: st.uses_datemock,
             has_multiple_expects: st.assertion_count > 1,
             is_skipped: is_skip,
@@ -1021,6 +1022,9 @@ impl TsParser {
                 }
                 if text == "setTimeout" {
                     st.uses_settimeout = true;
+                    if st.in_promise_constructor {
+                        st.uses_promise_settimeout = true;
+                    }
                 }
                 if text.starts_with("Date.") {
                     st.uses_datemock = true;
@@ -1043,16 +1047,22 @@ impl TsParser {
             }
             "new_expression" => {
                 let ctor = node.child_by_field_name("constructor").unwrap();
-                if ctor.utf8_text(source.as_bytes()).unwrap_or("") == "Date" {
+                let ctor_text = ctor.utf8_text(source.as_bytes()).unwrap_or("");
+                if ctor_text == "Date" {
                     st.uses_datemock = true;
                 }
-                // Traverse constructor arguments for nested call expressions
-                // (e.g. new Promise(r => setTimeout(r, N)))
+                let is_promise = ctor_text == "Promise";
+                if is_promise {
+                    st.in_promise_constructor = true;
+                }
                 if let Some(args) = node.child_by_field_name("arguments") {
                     for i in 0..args.named_child_count() {
                         let child = args.named_child(i).unwrap();
                         Self::walk_body(child, source, st);
                     }
+                }
+                if is_promise {
+                    st.in_promise_constructor = false;
                 }
             }
             "if_statement" | "switch_statement" => {
@@ -1206,6 +1216,8 @@ struct Analysis {
     has_conditional: bool,
     has_try_catch: bool,
     uses_settimeout: bool,
+    uses_promise_settimeout: bool,
+    in_promise_constructor: bool,
     uses_datemock: bool,
     has_return: bool,
     unawaited_async_assertions: usize,

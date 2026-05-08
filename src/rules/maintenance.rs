@@ -347,10 +347,13 @@ impl Rule for MissingAwaitAssertionRule {
         "MissingAwaitAssertionRule"
     }
     fn severity(&self) -> Severity {
-        Severity::Error
+        Severity::Warning
     }
     fn category(&self) -> Category {
         Category::Maintenance
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
     }
     fn check(
         &self,
@@ -625,6 +628,9 @@ impl Rule for ImplementationCoupledRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
     fn check(
         &self,
         module: &ParsedModule,
@@ -770,24 +776,22 @@ impl ImplementationCoupledRule {
                     .count()
             })
             .unwrap_or(0);
-        let has_tl_testid = module.imports_parsed.iter().any(|imp| {
-            imp.source.contains("@testing-library")
-        }) && module.imports.iter().any(|imp| imp.contains("getByTestId") || imp.contains("findByTestId"));
+        let has_tl_testid = module
+            .imports_parsed
+            .iter()
+            .any(|imp| imp.source.contains("@testing-library"))
+            && module
+                .imports
+                .iter()
+                .any(|imp| imp.contains("getByTestId") || imp.contains("findByTestId"));
         if pw_testid_count == 0 && !has_tl_testid {
             return None;
         }
         let has_negative = module
             .playwright
             .as_ref()
-            .map(|pw| {
-                pw.locator_chains
-                    .iter()
-                    .any(|c| c.root == "queryByTestId")
-            })
-            .unwrap_or(false)
-            || module.test_blocks.iter().any(|tb| {
-                tb.assertion_count > 0 && tb.weak_assertion_count < tb.assertion_count
-            });
+            .map(|pw| pw.locator_chains.iter().any(|c| c.root == "queryByTestId"))
+            .unwrap_or(false);
         if has_negative {
             return None;
         }
