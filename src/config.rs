@@ -21,6 +21,16 @@ struct RawRulesConfig {
     /// Per-rule severity overrides: {"VITEST-FLK-001": "off", "VITEST-MNT-001": "warning"}
     #[serde(default)]
     select: HashMap<String, String>,
+    #[serde(rename = "VITEST-DEP-001")]
+    dep001: Option<RawDep001RuleConfig>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RawDep001RuleConfig {
+    #[serde(default)]
+    stable_path_segments: Vec<String>,
+    #[serde(default)]
+    stable_file_suffixes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -52,6 +62,13 @@ pub struct Config {
 pub struct RulesConfig {
     /// Per-rule severity overrides. Key = rule ID, value = "off" | "info" | "warning" | "error"
     pub select: HashMap<String, String>,
+    pub dep001: Dep001RuleConfig,
+}
+
+#[derive(Debug)]
+pub struct Dep001RuleConfig {
+    pub stable_path_segments: Vec<String>,
+    pub stable_file_suffixes: Vec<String>,
 }
 
 impl RulesConfig {
@@ -67,6 +84,27 @@ impl RulesConfig {
     #[must_use]
     pub fn severity_override(&self, rule_id: &str) -> Option<&str> {
         self.select.get(rule_id).map(|s| s.as_str())
+    }
+}
+
+impl Default for Dep001RuleConfig {
+    fn default() -> Self {
+        Self {
+            stable_path_segments: vec![
+                "utils".to_string(),
+                "helpers".to_string(),
+                "mappers".to_string(),
+                "transforms".to_string(),
+                "validators".to_string(),
+                "schemas".to_string(),
+            ],
+            stable_file_suffixes: vec![
+                "-utils".to_string(),
+                "-mapper".to_string(),
+                "-helpers".to_string(),
+                "-schema".to_string(),
+            ],
+        }
     }
 }
 
@@ -157,6 +195,22 @@ impl Config {
             },
             rules: RulesConfig {
                 select: raw.rules.select,
+                dep001: raw
+                    .rules
+                    .dep001
+                    .map(|cfg| Dep001RuleConfig {
+                        stable_path_segments: if cfg.stable_path_segments.is_empty() {
+                            Dep001RuleConfig::default().stable_path_segments
+                        } else {
+                            cfg.stable_path_segments
+                        },
+                        stable_file_suffixes: if cfg.stable_file_suffixes.is_empty() {
+                            Dep001RuleConfig::default().stable_file_suffixes
+                        } else {
+                            cfg.stable_file_suffixes
+                        },
+                    })
+                    .unwrap_or_default(),
             },
         })
     }
@@ -172,6 +226,15 @@ impl Default for Config {
                 integration_test_glob,
             },
             rules: RulesConfig::default(),
+        }
+    }
+}
+
+impl Default for RulesConfig {
+    fn default() -> Self {
+        Self {
+            select: HashMap::new(),
+            dep001: Dep001RuleConfig::default(),
         }
     }
 }
