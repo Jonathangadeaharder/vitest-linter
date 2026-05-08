@@ -776,15 +776,7 @@ impl ImplementationCoupledRule {
                     .count()
             })
             .unwrap_or(0);
-        let has_tl_testid = module
-            .imports_parsed
-            .iter()
-            .any(|imp| imp.source.contains("@testing-library"))
-            && module
-                .imports
-                .iter()
-                .any(|imp| imp.contains("getByTestId") || imp.contains("findByTestId"));
-        if pw_testid_count == 0 && !has_tl_testid {
+        if pw_testid_count == 0 {
             return None;
         }
         let has_negative = module

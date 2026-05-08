@@ -3406,7 +3406,7 @@ banned_mock_paths = ["**/database"]
         "dep001_ok.test.ts",
         r#"
 import { vi, test, expect } from 'vitest';
-vi.mock('./utils', () => ({ helper: () => {} }));
+vi.mock('./api', () => ({ helper: () => {} }));
 
 test('works', () => {
     expect(true).toBe(true);

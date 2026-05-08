@@ -160,8 +160,8 @@ impl Rule for PreferToHaveLengthRule {
         for (line_idx, line) in source.lines().enumerate() {
             let trimmed = line.trim();
             let has_expect = trimmed.contains("expect(");
-            let has_length = trimmed.contains(".length)");
-            let has_size = trimmed.contains(".size)")
+            let has_length = trimmed.contains(".length");
+            let has_size = trimmed.contains(".size")
                 && !trimmed.contains("window.size")
                 && !trimmed.contains("fontSize")
                 && !trimmed.contains("font-size");

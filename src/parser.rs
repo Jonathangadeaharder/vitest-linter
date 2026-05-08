@@ -1052,6 +1052,7 @@ impl TsParser {
                     st.uses_datemock = true;
                 }
                 let is_promise = ctor_text == "Promise";
+                let prev_in_promise_constructor = st.in_promise_constructor;
                 if is_promise {
                     st.in_promise_constructor = true;
                 }
@@ -1061,9 +1062,7 @@ impl TsParser {
                         Self::walk_body(child, source, st);
                     }
                 }
-                if is_promise {
-                    st.in_promise_constructor = false;
-                }
+                st.in_promise_constructor = prev_in_promise_constructor;
             }
             "if_statement" | "switch_statement" => {
                 st.has_conditional = true;
@@ -1182,9 +1181,6 @@ impl TsParser {
         "toBeCalled",
         "toHaveReturned",
         "toHaveReturnedTimes",
-        "toBeGreaterThan",
-        "toBeLessThan",
-        "toBeCloseTo",
     ];
 
     /// Check if a subtree contains an `expect()` call.

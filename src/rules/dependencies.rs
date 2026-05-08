@@ -63,7 +63,9 @@ fn is_stable_dep(source: &str) -> bool {
     }
     let lower = source.to_lowercase();
     STABLE_DEP_SUFFIXES.iter().any(|s| lower.ends_with(s))
-        || STABLE_DEP_SEGMENTS.iter().any(|s| lower.contains(s))
+        || STABLE_DEP_SEGMENTS
+            .iter()
+            .any(|s| lower.contains(s) || lower.ends_with(s.trim_end_matches('/')))
 }
 
 pub struct BannedModuleMockRule;
