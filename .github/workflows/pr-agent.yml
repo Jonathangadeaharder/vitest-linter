@@ -1,0 +1,57 @@
+name: PR Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  pr-agent:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run PR Agent
+        env:
+          GITHUB.USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI.KEY: lm-studio
+          OPENAI.API_BASE: http://localhost:1234/v1
+          OPENAI.API_TYPE: "openai"
+          CONFIG.MODEL: "openai/qwen3.6-35b-a3b-ud-mlx"
+          CONFIG.FALLBACK_MODELS: '[]'
+          CONFIG.CUSTOM_MODEL_MAX_TOKENS: "32768"
+          CONFIG.AI_TIMEOUT: "300"
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "true"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "false"
+          GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened", "reopened", "ready_for_review"]'
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          if ! command -v pr-agent &>/dev/null; then
+            echo "ERROR: pr-agent not installed globally. Run: uv tool install pr-agent --with tiktoken --python 3.12"
+            exit 1
+          fi
+
+          PR_URL="https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number || github.event.issue.number }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pr-agent --pr_url="$PR_URL" review
+          elif echo "$COMMENT_BODY" | grep -q "^/review"; then
+            pr-agent --pr_url="$PR_URL" review
+          elif echo "$COMMENT_BODY" | grep -q "^/describe"; then
+            pr-agent --pr_url="$PR_URL" describe
+          elif echo "$COMMENT_BODY" | grep -q "^/improve"; then
+            pr-agent --pr_url="$PR_URL" improve
+          elif echo "$COMMENT_BODY" | grep -q "^/ask"; then
+            QUESTION="${COMMENT_BODY#/ask }"
+            pr-agent --pr_url="$PR_URL" ask "$QUESTION"
+          fi
