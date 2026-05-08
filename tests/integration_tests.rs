@@ -489,6 +489,7 @@ test('no assert', () => { const x = 1; });
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -525,6 +526,7 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -556,6 +558,7 @@ test('cond', () => { if (true) { expect(1).toBe(1); } });
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -598,6 +601,7 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -623,6 +627,7 @@ test('no assert', () => { const x = 1; });
     let output = std::process::Command::new(&bin)
         .arg(&test_path)
         .arg("--no-color")
+        .arg("--unstable-rules")
         .output()
         .unwrap();
 
@@ -1420,6 +1425,7 @@ test('timeout', () => {
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -1439,7 +1445,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, true, "HEAD").unwrap();
     assert!(has_errors);
 }
 
@@ -1461,6 +1467,7 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -1544,6 +1551,7 @@ test('no assert', () => { const x = 1; });
         Some(&output_path),
         false,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -1571,6 +1579,7 @@ test('clean', () => { expect(1).toBe(1); });
         Some(&output_path),
         false,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -1705,6 +1714,7 @@ test('has if', () => {
         Some(&output_path),
         true,
         false,
+        true,
         "HEAD",
     )
     .unwrap();
@@ -1723,7 +1733,7 @@ import { test, expect } from 'vitest';
 test('clean', () => { expect(1).toBe(1); });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "json", None, true, false, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "json", None, true, false, true, "HEAD").unwrap();
     assert!(!has_errors);
 }
 
@@ -1738,7 +1748,7 @@ import { test } from 'vitest';
 test('no assert', () => { const x = 1; });
 "#,
     );
-    let has_errors = run_cli(&[test_path], "terminal", None, true, false, "HEAD").unwrap();
+    let has_errors = run_cli(&[test_path], "terminal", None, true, false, true, "HEAD").unwrap();
     assert!(has_errors);
 }
 
