@@ -20,6 +20,6 @@ jobs:
             echo "ERROR: pr-agent not installed globally. Run: uv tool install pr-agent --with tiktoken --python 3.12"
             exit 1
           fi
-          INITIAL_COMMIT=$(git rev-list --max-parents=0 HEAD)
-          PR_URL="https://github.com/${{ github.repository }}/compare/$INITIAL_COMMIT...$(git rev-parse HEAD)"
+          EMPTY_TREE=$(git hash-object -t tree /dev/null)
+          PR_URL="https://github.com/${{ github.repository }}/compare/$EMPTY_TREE...$(git rev-parse HEAD)"
           pr-agent describe --pr_url="$PR_URL"
