@@ -7,19 +7,38 @@ jobs:
   review:
     runs-on: self-hosted
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Run codebase review
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI.KEY: ${{ secrets.CROFAI_API_KEY }}
           OPENAI.API_BASE: https://crof.ai/v1
           CONFIG.MODEL: "openai/glm-5.1"
         run: |
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
           if ! command -v pr-agent &>/dev/null; then
             echo "ERROR: pr-agent not installed globally. Run: uv tool install pr-agent --with tiktoken --python 3.12"
             exit 1
           fi
-          EMPTY_TREE=$(git hash-object -t tree /dev/null)
-          PR_URL="https://github.com/${{ github.repository }}/compare/$EMPTY_TREE...$(git rev-parse HEAD)"
+
+          BRANCH="tmp/codebase-review-$(date +%s)"
+          git checkout --orphan "$BRANCH"
+          git rm -rf . >/dev/null 2>&1 || true
+          echo "# Placeholder" > README.md
+          git add README.md
+          git commit -m "empty"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create --base "$BRANCH" --head "$DEFAULT_BRANCH" --title "Codebase Review $(date -u +%Y-%m-%d)" --body "Automated full codebase review" --json url --jq '.url')
+
           pr-agent describe --pr_url="$PR_URL"
+          pr-agent review --pr_url="$PR_URL"
+
+          gh pr close "$PR_URL" -d
+          git push origin --delete "$BRANCH" || true
