@@ -1,0 +1,25 @@
+name: Codebase Review
+
+on:
+  workflow_dispatch:
+
+jobs:
+  review:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run codebase review
+        env:
+          OPENAI.KEY: ${{ secrets.CROFAI_API_KEY }}
+          OPENAI.API_BASE: https://crof.ai/v1
+          CONFIG.MODEL: "openai/glm-5.1"
+        run: |
+          if ! command -v pr-agent &>/dev/null; then
+            echo "ERROR: pr-agent not installed globally. Run: uv tool install pr-agent --with tiktoken --python 3.12"
+            exit 1
+          fi
+          INITIAL_COMMIT=$(git rev-list --max-parents=0 HEAD)
+          PR_URL="https://github.com/${{ github.repository }}/compare/$INITIAL_COMMIT...$(git rev-parse HEAD)"
+          pr-agent describe --pr_url="$PR_URL"
