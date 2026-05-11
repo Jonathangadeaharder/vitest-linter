@@ -3724,36 +3724,37 @@ test('clean pw test', async ({ page }) => {
             rule_id
         );
     }
+}
 
-    #[test]
-    fn cross_runtime_rules_fire_on_playwright() {
-        let dir = TempDir::new().unwrap();
-        let path = write_fixture(
-            &dir,
-            "pw-no-assert.spec.ts",
-            r#"
+#[test]
+fn cross_runtime_rules_fire_on_playwright() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "pw-no-assert.spec.ts",
+        r#"
 import { test } from '@playwright/test';
 
 test('no assertions pw', async ({ page }) => {
     await page.goto('/');
 });
 "#,
-        );
-        let engine = LintEngine::new(true).unwrap();
-        let (violations, _) = engine.lint_paths(&[path]).unwrap();
-        assert!(
-            find_violation(&violations, "VITEST-MNT-001").is_some(),
-            "NoAssertionRule should fire on Playwright files too"
-        );
-    }
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    assert!(
+        find_violation(&violations, "VITEST-MNT-001").is_some(),
+        "NoAssertionRule should fire on Playwright files too"
+    );
+}
 
-    #[test]
-    fn mnt008_global_stub_without_cleanup() {
-        let dir = TempDir::new().unwrap();
-        let path = write_fixture(
-            &dir,
-            "global_stub.test.ts",
-            r#"
+#[test]
+fn mnt008_global_stub_without_cleanup() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "global_stub.test.ts",
+        r#"
 import { vi, test, expect } from 'vitest';
 
 const mockFetch = vi.fn();
@@ -3763,23 +3764,23 @@ test('uses global fetch', () => {
     expect(1).toBe(1);
 });
 "#,
-        );
-        let engine = LintEngine::new(true).unwrap();
-        let (violations, _) = engine.lint_paths(&[path]).unwrap();
-        let v = find_violation(&violations, "VITEST-MNT-008");
-        assert!(
-            v.is_some(),
-            "Expected VITEST-MNT-008 for global.fetch stub without cleanup"
-        );
-    }
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-008 for global.fetch stub without cleanup"
+    );
+}
 
-    #[test]
-    fn mnt008_vi_stub_global_without_unstub() {
-        let dir = TempDir::new().unwrap();
-        let path = write_fixture(
-            &dir,
-            "stub_global.test.ts",
-            r#"
+#[test]
+fn mnt008_vi_stub_global_without_unstub() {
+    let dir = TempDir::new().unwrap();
+    let path = write_fixture(
+        &dir,
+        "stub_global.test.ts",
+        r#"
 import { vi, test, expect } from 'vitest';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true })));
@@ -3788,15 +3789,14 @@ test('uses stubbed fetch', () => {
     expect(1).toBe(1);
 });
 "#,
-        );
-        let engine = LintEngine::new(true).unwrap();
-        let (violations, _) = engine.lint_paths(&[path]).unwrap();
-        let v = find_violation(&violations, "VITEST-MNT-008");
-        assert!(
-            v.is_some(),
-            "Expected VITEST-MNT-008 for vi.stubGlobal without vi.unstubAllGlobals"
-        );
-    }
+    );
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
+    assert!(
+        v.is_some(),
+        "Expected VITEST-MNT-008 for vi.stubGlobal without vi.unstubAllGlobals"
+    );
 }
 
 #[test]
@@ -3888,4 +3888,38 @@ test('chained css selectors', async ({ page }) => {
         find_violation(&violations, "VITEST-PW-011").is_some(),
         "PW-011 should flag hard CSS class chain"
     );
+}
+
+#[test]
+fn mnt007_playwright_fixture_violates() {
+    let fixture_dir = std::path::Path::new("tests/fixtures/mnt_007_focused_test/playwright_test_only");
+    assert!(fixture_dir.exists(), "Fixture directory should exist");
+    let input_path = fixture_dir.join("input.spec.ts");
+    assert!(input_path.exists(), "Fixture input file should exist");
+
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[input_path]).unwrap();
+
+    let mnt007: Vec<_> = violations
+        .iter()
+        .filter(|v| v.rule_id == "VITEST-MNT-007")
+        .collect();
+
+    assert_eq!(mnt007.len(), 2, "Expected 2 FocusedTestRule violations");
+
+    let describe_v: Vec<_> = mnt007
+        .iter()
+        .filter(|v| v.test_name.is_none())
+        .collect();
+    let test_v: Vec<_> = mnt007
+        .iter()
+        .filter(|v| v.test_name.is_some())
+        .collect();
+
+    assert_eq!(describe_v.len(), 1, "Expected 1 describe.only violation");
+    assert_eq!(test_v.len(), 1, "Expected 1 test.only violation");
+
+    assert_eq!(describe_v[0].line, 3);
+    assert_eq!(test_v[0].line, 9);
+    assert_eq!(test_v[0].test_name.as_deref(), Some("standalone focused test"));
 }
