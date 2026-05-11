@@ -5,7 +5,7 @@ on:
 
 jobs:
   review:
-    runs-on: self-hosted
+    runs-on: [self-hosted, macOS]
     permissions:
       contents: write
       pull-requests: write
@@ -35,7 +35,7 @@ jobs:
           git commit -m "empty"
           git push origin "$BRANCH"
 
-          PR_URL=$(gh pr create --base "$BRANCH" --head "$DEFAULT_BRANCH" --title "Codebase Review $(date -u +%Y-%m-%d)" --body "Automated full codebase review" --json url --jq '.url')
+          PR_URL=$(gh pr create --base "$BRANCH" --head "$DEFAULT_BRANCH" --title "Codebase Review $(date -u +%Y-%m-%d)" --body "Automated full codebase review")
 
           pr-agent describe --pr_url="$PR_URL"
           pr-agent review --pr_url="$PR_URL"
