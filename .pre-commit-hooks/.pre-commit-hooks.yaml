@@ -1,0 +1,7 @@
+- id: vitest-linter
+  name: vitest-linter
+  description: 'Lint Vitest test files for test smells'
+  entry: vitest-linter
+  language: rust
+  files: '\.(test|spec)\.(ts|tsx|js|jsx)$'
+  types: [file]
