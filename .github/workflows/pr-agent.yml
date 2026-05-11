@@ -24,10 +24,10 @@ jobs:
       - name: Run PR Agent
         env:
           GITHUB.USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI.KEY: lm-studio
-          OPENAI.API_BASE: http://localhost:1234/v1
+          OPENAI.KEY: ${{ secrets.CROFAI_API_KEY }}
+          OPENAI.API_BASE: https://crof.ai/v1
           OPENAI.API_TYPE: "openai"
-          CONFIG.MODEL: "openai/qwen3.6-35b-a3b-ud-mlx"
+          CONFIG.MODEL: "openai/glm-5.1"
           CONFIG.FALLBACK_MODELS: '[]'
           CONFIG.CUSTOM_MODEL_MAX_TOKENS: "32768"
           CONFIG.AI_TIMEOUT: "300"
