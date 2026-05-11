@@ -1,0 +1,21 @@
+name: Codebase Review
+
+on:
+  workflow_dispatch:
+
+jobs:
+  review:
+    runs-on: [self-hosted, macOS]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run codebase review
+        env:
+          CROFAI_API_KEY: ${{ secrets.CROFAI_API_KEY }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: bash .github/scripts/codebase-review.sh
