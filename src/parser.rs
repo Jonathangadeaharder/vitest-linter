@@ -273,7 +273,15 @@ impl TsParser {
             "test" | "it" | "fit" | "xit" => {
                 // Playwright: test.describe / test.describe.only are describe blocks
                 if full_callee.starts_with("test.describe") {
-                    Self::add_describe_block(node, source, path, describe_depth, is_only, scope, ctx);
+                    Self::add_describe_block(
+                        node,
+                        source,
+                        path,
+                        describe_depth,
+                        is_only,
+                        scope,
+                        ctx,
+                    );
                 } else {
                     let uses_fit_or_xit =
                         full_callee.starts_with("fit") || full_callee.starts_with("xit");
@@ -764,8 +772,7 @@ impl TsParser {
         let name = name_node
             .and_then(|n| Self::string_value(n, source))
             .unwrap_or_default();
-        let title_is_template_literal =
-            name_node.is_some_and(|n| n.kind() == "template_string");
+        let title_is_template_literal = name_node.is_some_and(|n| n.kind() == "template_string");
         let title_is_empty = name.is_empty();
         let is_async = node
             .child_by_field_name("arguments")
