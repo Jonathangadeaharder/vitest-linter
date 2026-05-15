@@ -34,7 +34,7 @@ pub fn classify_selector(raw: &str) -> SelectorClass {
 
     // Count CSS class tokens (.foo is a class token)
     let tokens: Vec<&str> = raw.split_whitespace().collect();
-    let class_tokens: Vec<&&str> = tokens.iter().filter(|t| t.starts_with('.')).collect();
+    let class_tokens: Vec<&&str> = tokens.iter().filter(|t| t.contains('.')).collect();
 
     // Chained class: more than one class token or a combinator like >, +, ~
     let has_combinator = raw.contains(" > ") || raw.contains(" + ") || raw.contains(" ~ ");
@@ -47,8 +47,14 @@ pub fn classify_selector(raw: &str) -> SelectorClass {
         return SelectorClass::TestId;
     }
 
-    // CSS class (single) — starts with . or has . anywhere (e.g., div.active)
-    if raw.starts_with('.') || raw.contains('.') {
+    // CSS class (single) — starts with . or has . but not spaces/quotes/equals (e.g., div.active)
+    if raw.starts_with('.')
+        || (raw.contains('.')
+            && !raw.contains(' ')
+            && !raw.contains('=')
+            && !raw.contains('"')
+            && !raw.contains('\''))
+    {
         return SelectorClass::CssClass;
     }
 
@@ -112,5 +118,15 @@ mod tests {
     #[test]
     fn id_takes_precedence_over_chained() {
         assert_eq!(classify_selector("#foo .bar"), SelectorClass::CssId);
+    }
+
+    #[test]
+    fn dotted_text_is_not_css_class() {
+        assert_eq!(classify_selector("text=Mr. Smith"), SelectorClass::Other);
+    }
+
+    #[test]
+    fn mixed_class_chains() {
+        assert_eq!(classify_selector("div.foo .bar"), SelectorClass::ChainedClass);
     }
 }

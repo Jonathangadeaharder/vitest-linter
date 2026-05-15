@@ -1,0 +1,21 @@
+{
+  "name": "eslint-plugin-vitest-linter",
+  "version": "0.1.0",
+  "description": "ESLint plugin that surfaces vitest-linter diagnostics through ESLint's reporter",
+  "keywords": ["eslint", "eslintplugin", "vitest", "linter", "test-smells"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jonathangadeaharder/vitest-linter.git",
+    "directory": "eslint-plugin-vitest-linter"
+  },
+  "main": "index.js",
+  "files": ["index.js", "lib/**"],
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "name": "vitest-linter",
+  "displayName": "Vitest Linter",
+  "description": "Zero-config test-smell diagnostics for Vitest projects. Wraps the vitest-linter LSP-compatible CLI.",
+  "version": "0.1.0",
+  "publisher": "jonathangadeaharder",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jonathangadeaharder/vitest-linter.git",
+    "directory": "vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/Jonathangadeaharder/vitest-linter/issues"
+  },
+  "keywords": [
+    "vitest",
+    "linter",
+    "testing",
+    "test-smells",
+    "diagnostics"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Testing"
+  ],
+  "icon": "icon.png",
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact",
+    "onLanguage:svelte",
+    "onLanguage:vue"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Vitest Linter",
+      "properties": {
+        "vitest-linter.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the Vitest Linter extension."
+        },
+        "vitest-linter.executablePath": {
+          "type": "string",
+          "default": "vitest-linter",
+          "description": "Path to the vitest-linter binary. Defaults to the one on PATH."
+        },
+        "vitest-linter.run": {
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onType"
+          ],
+          "default": "onSave",
+          "description": "When to run the linter: on file save or on every keystroke."
+        },
+        "vitest-linter.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns to include (e.g. [\"src/**/*.test.ts\"]). Empty = all test files."
+        },
+        "vitest-linter.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**"
+          ],
+          "description": "Glob patterns to exclude."
+        },
+        "vitest-linter.severityOverrides": {
+          "type": "object",
+          "default": {},
+          "description": "Override severity per rule. Keys are rule IDs (e.g. \"VITEST-FLK-001\"), values are \"off\", \"info\", \"warning\", or \"error\"."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "vitest-linter.lintWorkspace",
+        "title": "Vitest Linter: Lint Workspace"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "pnpm dlx @biomejs/biome check ./src"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.5.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

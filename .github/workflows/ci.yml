@@ -12,7 +12,7 @@ permissions:
 jobs:
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -24,7 +24,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -36,7 +36,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -46,7 +46,7 @@ jobs:
 
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -60,7 +60,7 @@ jobs:
 
   audit:
     name: Audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -73,7 +73,7 @@ jobs:
   dogfood:
     name: Dogfood
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

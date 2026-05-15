@@ -12,7 +12,8 @@ permissions:
 
 jobs:
   lint-tests:
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
         with:
