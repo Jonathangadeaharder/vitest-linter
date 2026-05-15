@@ -12,13 +12,7 @@
   "main": "index.js",
   "files": ["index.js", "lib/**"],
   "peerDependencies": {
-    "eslint": ">=8.0.0",
-    "vitest-linter": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "vitest-linter": {
-      "optional": true
-    }
+    "eslint": ">=8.0.0"
   },
   "dependencies": {},
   "engines": {

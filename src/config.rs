@@ -181,8 +181,15 @@ impl Config {
     /// Returns the path as-is if it cannot be resolved.
     #[must_use]
     pub fn resolve_module_path(&self, import_path: &str) -> String {
-        // For now, return as-is
-        // TODO: Add tsconfig path resolution
+        // Try tsconfig resolution if available
+        let project_root = std::env::current_dir().ok();
+        if let Some(root) = project_root {
+            if let Some(tsconfig) = TsConfig::load_from(&root) {
+                if let Some(resolved) = tsconfig.resolve(import_path, &root) {
+                    return resolved.to_string_lossy().to_string();
+                }
+            }
+        }
         import_path.to_string()
     }
 }

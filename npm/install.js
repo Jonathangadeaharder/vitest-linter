@@ -1,4 +1,4 @@
-const { execSync } = require("child_process");
+const { execFileSync, execSync } = require("child_process");
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
@@ -59,7 +59,6 @@ function download(url, dest) {
           }
           const stream = fs.createWriteStream(dest);
           res.pipe(stream);
-          res.on("error", reject);
           stream.on("finish", () => {
             stream.close();
             resolve();
@@ -74,12 +73,17 @@ function download(url, dest) {
 
 function extract(archive, destDir) {
   if (os.platform() === "win32") {
-    execSync(
-      `powershell -Command "Expand-Archive -Path '${archive}' -DestinationPath '${destDir}' -Force"`,
-      { stdio: "inherit" }
-    );
+    execFileSync("powershell", [
+      "-Command",
+      "Expand-Archive",
+      "-Path",
+      archive,
+      "-DestinationPath",
+      destDir,
+      "-Force",
+    ], { stdio: "inherit" });
   } else {
-    execSync(`tar -xzf "${archive}" -C "${destDir}"`, { stdio: "inherit" });
+    execFileSync("tar", ["-xzf", archive, "-C", destDir], { stdio: "inherit" });
   }
 }
 
@@ -88,7 +92,9 @@ async function main() {
   const target = getTarget();
   const binDir = path.join(__dirname, "bin");
   const ext = os.platform() === "win32" ? ".exe" : "";
-  const binPath = path.join(binDir, `${BIN_NAME}-bin${ext}`);
+  const binPath = path.join(binDir, `${BIN_NAME}${ext}`);
+
+  fs.mkdirSync(binDir, { recursive: true });
 
   if (fs.existsSync(binPath)) {
     return;
@@ -132,13 +138,11 @@ async function main() {
     console.warn(`Prebuilt binary download failed: ${err.message}`);
     console.warn("Falling back to cargo install...");
     try {
-      execSync(`cargo install vitest-linter --version ${version} --locked`, { stdio: "inherit" });
-      const cargoHome =
-        process.env.CARGO_HOME || path.join(os.homedir(), ".cargo");
-      const cargoBin =
-        os.platform() === "win32"
-          ? path.join(cargoHome, "bin", `${BIN_NAME}.exe`)
-          : path.join(cargoHome, "bin", BIN_NAME);
+      execSync("cargo install vitest-linter --locked", { stdio: "inherit" });
+      const cargoHome = process.env.CARGO_HOME || path.join(os.homedir(), ".cargo");
+      const cargoBin = os.platform() === "win32"
+        ? path.join(cargoHome, "bin", `${BIN_NAME}.exe`)
+        : path.join(cargoHome, "bin", BIN_NAME);
       if (fs.existsSync(cargoBin)) {
         fs.copyFileSync(cargoBin, binPath);
         console.log("Installed via cargo install.");
@@ -155,7 +159,4 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main();

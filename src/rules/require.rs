@@ -42,7 +42,8 @@ impl Rule for RequireHookRule {
                 line: mock.line,
                 col: None,
                 suggestion: Some(
-                    "Move vi.mock() calls inside beforeEach/afterEach hooks for proper setup/teardown scoping".to_string(),
+                    "Use vi.doMock() with dynamic imports instead of top-level vi.mock()"
+                        .to_string(),
                 ),
                 test_name: None,
             }]
@@ -85,79 +86,23 @@ impl Rule for RequireTopLevelDescribeRule {
             return vec![];
         }
 
-        let Ok(source) = std::fs::read_to_string(&module.file_path) else {
-            return orphan_tests
-                .iter()
-                .map(|tb| Violation {
-                    rule_id: self.id().to_string(),
-                    rule_name: self.name().to_string(),
-                    severity: self.severity(),
-                    category: self.category(),
-                    message: format!("Test '{}' exists outside of any describe block", tb.name),
-                    file_path: tb.file_path.clone(),
-                    line: tb.line,
-                    col: None,
-                    suggestion: Some(
-                        "Wrap this test in a describe() block for better organization".to_string(),
-                    ),
-                    test_name: Some(tb.name.clone()),
-                })
-                .collect();
-        };
-
-        let mut violations = Vec::new();
-
-        for (line_idx, line) in source.lines().enumerate() {
-            let trimmed = line.trim();
-            let line_num = line_idx + 1;
-
-            let is_test_call = trimmed.starts_with("test(")
-                || trimmed.starts_with("test.skip(")
-                || trimmed.starts_with("test.only(")
-                || trimmed.starts_with("test.each(")
-                || trimmed.starts_with("test.concurrent(")
-                || trimmed.starts_with("it(")
-                || trimmed.starts_with("it.skip(")
-                || trimmed.starts_with("it.only(")
-                || trimmed.starts_with("it.each(")
-                || trimmed.starts_with("it.concurrent(");
-
-            if !is_test_call {
-                continue;
-            }
-
-            let inside_describe = orphan_tests
-                .iter()
-                .any(|tb| tb.line == line_num && tb.is_nested);
-
-            if inside_describe {
-                continue;
-            }
-
-            let already_reported = violations.iter().any(|v: &Violation| v.line == line_num);
-            if already_reported {
-                continue;
-            }
-
-            if let Some(tb) = orphan_tests.iter().find(|tb| tb.line == line_num) {
-                violations.push(Violation {
-                    rule_id: self.id().to_string(),
-                    rule_name: self.name().to_string(),
-                    severity: self.severity(),
-                    category: self.category(),
-                    message: format!("Test '{}' exists outside of any describe block", tb.name),
-                    file_path: tb.file_path.clone(),
-                    line: tb.line,
-                    col: None,
-                    suggestion: Some(
-                        "Wrap this test in a describe() block for better organization".to_string(),
-                    ),
-                    test_name: Some(tb.name.clone()),
-                });
-            }
-        }
-
-        violations
+        orphan_tests
+            .iter()
+            .map(|tb| Violation {
+                rule_id: self.id().to_string(),
+                rule_name: self.name().to_string(),
+                severity: self.severity(),
+                category: self.category(),
+                message: format!("Test '{}' exists outside of any describe block", tb.name),
+                file_path: tb.file_path.clone(),
+                line: tb.line,
+                col: None,
+                suggestion: Some(
+                    "Wrap this test in a describe() block for better organization".to_string(),
+                ),
+                test_name: Some(tb.name.clone()),
+            })
+            .collect()
     }
 }
 

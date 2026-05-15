@@ -22,7 +22,7 @@ jobs:
           - target: aarch64-apple-darwin
             runner: macos-latest
           - target: x86_64-apple-darwin
-            runner: macos-13
+            runner: macos-15-intel
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
           - target: aarch64-unknown-linux-gnu
@@ -55,7 +55,7 @@ jobs:
   publish:
     name: Create GitHub Release + publish npm
     needs: dist
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -75,8 +75,13 @@ jobs:
           DIST_SIGNING_KEY: ${{ secrets.DIST_SIGNING_KEY }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+          always-auth: true
       - name: Publish npm wrapper
         working-directory: npm
-        run: |
-          npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
-          npm publish --access public
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

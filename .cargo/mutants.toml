@@ -1,1 +1,1 @@
-exclude_globs = ["benches/**"]
+exclude_globs = ["benches/**", "tests/**"]

@@ -33,12 +33,6 @@ impl Rule for PreferToBeRule {
         let mut violations = Vec::new();
         for (line_idx, line) in source.lines().enumerate() {
             let trimmed = line.trim();
-            if trimmed.contains(".toEqual(")
-                && !trimmed.contains(".toEqual(")
-                && !trimmed.contains("toEqual(")
-            {
-                continue;
-            }
             if trimmed.contains(".toEqual(") {
                 let after = trimmed.split(".toEqual(").nth(1).unwrap_or("");
                 let arg = after.split(',').next().unwrap_or(after).trim();

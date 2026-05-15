@@ -1,4 +1,5 @@
-const { getViolations } = require("./lib/runner");
+const path = require("path");
+const { getViolations, clearCache } = require("./lib/runner");
 const ruleDefinitions = require("./lib/rules");
 
 const rules = {};
@@ -12,7 +13,7 @@ for (const def of ruleDefinitions) {
         description: def.description,
         category: "Test Smells",
         recommended: true,
-        url: `https://github.com/Jonathangadeaharder/vitest-linter#${def.ruleId.toLowerCase()}`,
+        url: `https://github.com/Jonathangadeaharder/vitest-linter#rule-${def.ruleId.toLowerCase()}`,
       },
       schema: [],
     },
@@ -20,8 +21,10 @@ for (const def of ruleDefinitions) {
       const filePath = context.filename ?? context.getFilename();
       return {
         Program() {
-          const violationsMap = getViolations(filePath);
-          const matched = violationsMap[def.ruleId] || [];
+          const violations = getViolations(filePath);
+          const matched = violations.filter(
+            (v) => v.rule_id === def.ruleId,
+          );
           for (const v of matched) {
             context.report({
               loc: {
@@ -46,6 +49,7 @@ const plugin = {
   },
   rules,
   configs: {},
+  processors: {},
 };
 
 plugin.configs.recommended = {

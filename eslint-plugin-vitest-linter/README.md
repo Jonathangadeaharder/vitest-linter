@@ -56,7 +56,7 @@ Override any rule severity in your ESLint config:
 
 ## Rules
 
-The plugin exposes one ESLint rule per vitest-linter rule. Each rule maps to the corresponding diagnostic from the standalone CLI.
+The plugin exposes one ESLint rule per vitest-linter rule (65 total). Each rule maps to the corresponding `VITEST-*` diagnostic from the standalone CLI.
 
 | ESLint rule | Linter ID |
 |---|---|
@@ -129,8 +129,6 @@ The plugin exposes one ESLint rule per vitest-linter rule. Each rule maps to the
 ## How it works
 
 The plugin spawns `vitest-linter --format json` for each file ESLint processes. Results are cached per file during a single lint run so the binary is only invoked once per file regardless of how many rules are enabled.
-
-During a single ESLint run, each file is only passed to `vitest-linter` once even if multiple rules are enabled — the results are shared across all rules via an in-memory cache.
 
 ## License
 

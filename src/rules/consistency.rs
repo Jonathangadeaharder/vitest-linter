@@ -102,8 +102,7 @@ impl Rule for ConsistentVitestViRule {
                 (trimmed.starts_with("import ") || trimmed.starts_with("import{"))
                     && trimmed.contains("vi")
                     && trimmed.contains("from")
-                    && trimmed.contains("'vitest'")
-                    || trimmed.contains("\"vitest\"")
+                    && (trimmed.contains("'vitest'") || trimmed.contains("\"vitest\""))
             });
 
         let has_vitest_namespace = module

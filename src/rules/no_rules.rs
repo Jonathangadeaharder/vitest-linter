@@ -266,6 +266,8 @@ impl Rule for NoDuplicateHooksRule {
         let mut violations = Vec::new();
         let mut seen_before_each = false;
         let mut seen_after_each = false;
+        let mut seen_before_all = false;
+        let mut seen_after_all = false;
 
         for hook in &module.hook_calls {
             match hook.kind {
@@ -307,7 +309,44 @@ impl Rule for NoDuplicateHooksRule {
                     }
                     seen_after_each = true;
                 }
-                _ => {}
+                HookKind::BeforeAll => {
+                    if seen_before_all {
+                        violations.push(Violation {
+                            rule_id: self.id().to_string(),
+                            rule_name: self.name().to_string(),
+                            severity: self.severity(),
+                            category: self.category(),
+                            message: "Duplicate beforeAll hook".to_string(),
+                            file_path: module.file_path.clone(),
+                            line: hook.line,
+                            col: None,
+                            suggestion: Some(
+                                "Consolidate duplicate beforeAll hooks into one".to_string(),
+                            ),
+                            test_name: None,
+                        });
+                    }
+                    seen_before_all = true;
+                }
+                HookKind::AfterAll => {
+                    if seen_after_all {
+                        violations.push(Violation {
+                            rule_id: self.id().to_string(),
+                            rule_name: self.name().to_string(),
+                            severity: self.severity(),
+                            category: self.category(),
+                            message: "Duplicate afterAll hook".to_string(),
+                            file_path: module.file_path.clone(),
+                            line: hook.line,
+                            col: None,
+                            suggestion: Some(
+                                "Consolidate duplicate afterAll hooks into one".to_string(),
+                            ),
+                            test_name: None,
+                        });
+                    }
+                    seen_after_all = true;
+                }
             }
         }
 

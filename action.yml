@@ -24,7 +24,7 @@ inputs:
   base:
     description: Git ref for incremental mode
     required: false
-    default: HEAD
+    default: "HEAD~1"
 
 outputs:
   sarif-file:
@@ -53,15 +53,21 @@ runs:
     - name: Run vitest-linter
       id: lint
       shell: bash
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_NO_COLOR: ${{ inputs.no-color }}
+        INPUT_INCREMENTAL: ${{ inputs.incremental }}
+        INPUT_BASE: ${{ inputs.base }}
       run: |
         ARGS=()
-        ARGS+=(${{ inputs.paths }})
-        ARGS+=(--format ${{ inputs.format }})
-        if [ "${{ inputs.no-color }}" = "true" ]; then
+        ARGS+=($INPUT_PATHS)
+        ARGS+=(--format $INPUT_FORMAT)
+        if [ "$INPUT_NO_COLOR" = "true" ]; then
           ARGS+=(--no-color)
         fi
-        if [ "${{ inputs.incremental }}" = "true" ]; then
-          ARGS+=(--incremental --base ${{ inputs.base }})
+        if [ "$INPUT_INCREMENTAL" = "true" ]; then
+          ARGS+=(--incremental --base "$INPUT_BASE")
         fi
 
         OUTPUT_FILE="vitest-linter-results.sarif"

@@ -1,7 +1,7 @@
 {
   "name": "vitest-linter",
   "displayName": "Vitest Linter",
-  "description": "Zero-config test-smell diagnostics for Vitest projects. Wraps the vitest-linter CLI.",
+  "description": "Zero-config test-smell diagnostics for Vitest projects. Wraps the vitest-linter LSP-compatible CLI.",
   "version": "0.1.0",
   "publisher": "jonathangadeaharder",
   "license": "MIT",
@@ -13,11 +13,21 @@
   "bugs": {
     "url": "https://github.com/Jonathangadeaharder/vitest-linter/issues"
   },
-  "keywords": ["vitest", "linter", "testing", "test-smells", "diagnostics"],
+  "keywords": [
+    "vitest",
+    "linter",
+    "testing",
+    "test-smells",
+    "diagnostics"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Linters", "Testing"],
+  "categories": [
+    "Linters",
+    "Testing"
+  ],
+  "icon": "icon.png",
   "activationEvents": [
     "onLanguage:typescript",
     "onLanguage:javascript",
@@ -43,26 +53,35 @@
         },
         "vitest-linter.run": {
           "type": "string",
-          "enum": ["onSave", "onType"],
+          "enum": [
+            "onSave",
+            "onType"
+          ],
           "default": "onSave",
           "description": "When to run the linter: on file save or on every keystroke."
         },
         "vitest-linter.include": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
-          "description": "Glob patterns to include. Empty = all test files."
+          "description": "Glob patterns to include (e.g. [\"src/**/*.test.ts\"]). Empty = all test files."
         },
         "vitest-linter.exclude": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["**/node_modules/**"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**"
+          ],
           "description": "Glob patterns to exclude."
         },
         "vitest-linter.severityOverrides": {
           "type": "object",
           "default": {},
-          "description": "Override severity per rule. Keys: rule IDs. Values: \"off\" | \"info\" | \"warning\" | \"error\"."
+          "description": "Override severity per rule. Keys are rule IDs (e.g. \"VITEST-FLK-001\"), values are \"off\", \"info\", \"warning\", or \"error\"."
         }
       }
     },
@@ -84,5 +103,14 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.5.0"
-  }
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
 }
