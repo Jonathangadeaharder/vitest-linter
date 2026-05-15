@@ -3889,3 +3889,35 @@ test('chained css selectors', async ({ page }) => {
         "PW-011 should flag hard CSS class chain"
     );
 }
+
+#[test]
+fn mnt007_playwright_fixture_violates() {
+    let fixture_dir =
+        std::path::Path::new("tests/fixtures/mnt_007_focused_test/playwright_test_only");
+    assert!(fixture_dir.exists(), "Fixture directory should exist");
+    let input_path = fixture_dir.join("input.spec.ts");
+    assert!(input_path.exists(), "Fixture input file should exist");
+
+    let engine = LintEngine::new(true).unwrap();
+    let (violations, _) = engine.lint_paths(&[input_path]).unwrap();
+
+    let mnt007: Vec<_> = violations
+        .iter()
+        .filter(|v| v.rule_id == "VITEST-MNT-007")
+        .collect();
+
+    assert_eq!(mnt007.len(), 2, "Expected 2 FocusedTestRule violations");
+
+    let describe_v: Vec<_> = mnt007.iter().filter(|v| v.test_name.is_none()).collect();
+    let test_v: Vec<_> = mnt007.iter().filter(|v| v.test_name.is_some()).collect();
+
+    assert_eq!(describe_v.len(), 1, "Expected 1 describe.only violation");
+    assert_eq!(test_v.len(), 1, "Expected 1 test.only violation");
+
+    assert_eq!(describe_v[0].line, 3);
+    assert_eq!(test_v[0].line, 9);
+    assert_eq!(
+        test_v[0].test_name.as_deref(),
+        Some("standalone focused test")
+    );
+}

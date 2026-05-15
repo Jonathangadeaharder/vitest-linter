@@ -271,61 +271,38 @@ impl TsParser {
 
         match func_name.as_str() {
             "test" | "it" | "fit" | "xit" => {
-                let uses_fit_or_xit =
-                    full_callee.starts_with("fit") || full_callee.starts_with("xit");
-                if let Some(tb) = Self::extract_test(
-                    node,
-                    source,
-                    path,
-                    describe_depth,
-                    is_skip,
-                    is_only,
-                    uses_fit_or_xit,
-                ) {
-                    ctx.test_blocks.push(tb);
-                }
-                // Recurse into body with Test scope so nested vi.* calls
-                // (rare, and a smell themselves) get tagged correctly.
-                if let Some(body) = Self::callback_body(node) {
-                    Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
+                // Playwright: test.describe / test.describe.only are describe blocks
+                if full_callee.starts_with("test.describe") {
+                    Self::add_describe_block(
+                        node,
+                        source,
+                        path,
+                        describe_depth,
+                        is_only,
+                        scope,
+                        ctx,
+                    );
+                } else {
+                    let uses_fit_or_xit =
+                        full_callee.starts_with("fit") || full_callee.starts_with("xit");
+                    if let Some(tb) = Self::extract_test(
+                        node,
+                        source,
+                        path,
+                        describe_depth,
+                        is_skip,
+                        is_only,
+                        uses_fit_or_xit,
+                    ) {
+                        ctx.test_blocks.push(tb);
+                    }
+                    if let Some(body) = Self::callback_body(node) {
+                        Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
+                    }
                 }
             }
             "describe" | "fdescribe" | "xdescribe" => {
-                // Record describe block for .only detection
-                let name_node = node
-                    .child_by_field_name("arguments")
-                    .and_then(|args| args.named_child(0));
-                let name = name_node
-                    .and_then(|n| Self::string_value(n, source))
-                    .unwrap_or_default();
-                let title_is_template_literal =
-                    name_node.is_some_and(|n| n.kind() == "template_string");
-                let title_is_empty = name.is_empty();
-
-                let is_async = node
-                    .child_by_field_name("arguments")
-                    .and_then(|args| args.named_child(1))
-                    .is_some_and(|cb| {
-                        let text = cb.utf8_text(source.as_bytes()).unwrap_or("");
-                        text.starts_with("async")
-                    });
-
-                ctx.describe_blocks.push(DescribeBlock {
-                    name,
-                    file_path: path.to_path_buf(),
-                    line: node.start_position().row + 1,
-                    is_only,
-                    depth: describe_depth,
-                    title_is_template_literal,
-                    title_is_empty,
-                    is_async,
-                });
-
-                if let Some(body) = Self::callback_body(node) {
-                    Self::collect(body, source, path, describe_depth + 1, scope, ctx);
-                } else {
-                    Self::collect(node, source, path, describe_depth, scope, ctx);
-                }
+                Self::add_describe_block(node, source, path, describe_depth, is_only, scope, ctx);
             }
             "beforeEach" | "afterEach" | "beforeAll" | "afterAll" => {
                 let kind = match func_name.as_str() {
@@ -755,12 +732,19 @@ impl TsParser {
         }
     }
 
+    fn find_callback_in_args(args: Node) -> Option<Node> {
+        for i in 0..args.named_child_count() {
+            let child = args.named_child(i)?;
+            if matches!(child.kind(), "arrow_function" | "function_expression") {
+                return Some(child);
+            }
+        }
+        None
+    }
+
     fn callback_body(call_node: Node) -> Option<Node> {
         let args = call_node.child_by_field_name("arguments")?;
-        if args.named_child_count() < 2 {
-            return None;
-        }
-        let callback = args.named_child(1)?;
+        let callback = Self::find_callback_in_args(args)?;
         Self::func_body(callback)
     }
 
@@ -771,6 +755,47 @@ impl TsParser {
         }
         let callback = args.named_child(0)?;
         Self::func_body(callback)
+    }
+
+    fn add_describe_block(
+        node: Node,
+        source: &str,
+        path: &Path,
+        describe_depth: usize,
+        is_only: bool,
+        scope: MockScope,
+        ctx: &mut Context,
+    ) {
+        let name_node = node
+            .child_by_field_name("arguments")
+            .and_then(|args| args.named_child(0));
+        let name = name_node
+            .and_then(|n| Self::string_value(n, source))
+            .unwrap_or_default();
+        let title_is_template_literal = name_node.is_some_and(|n| n.kind() == "template_string");
+        let title_is_empty = name.is_empty();
+        let is_async = node
+            .child_by_field_name("arguments")
+            .and_then(|args| Self::find_callback_in_args(args))
+            .is_some_and(|cb| {
+                let text = cb.utf8_text(source.as_bytes()).unwrap_or("");
+                text.trim_start().starts_with("async")
+            });
+        ctx.describe_blocks.push(DescribeBlock {
+            name,
+            file_path: path.to_path_buf(),
+            line: node.start_position().row + 1,
+            is_only,
+            depth: describe_depth,
+            title_is_template_literal,
+            title_is_empty,
+            is_async,
+        });
+        if let Some(body) = Self::callback_body(node) {
+            Self::collect(body, source, path, describe_depth + 1, scope, ctx);
+        } else {
+            Self::collect(node, source, path, describe_depth, scope, ctx);
+        }
     }
 
     fn func_body(func_node: Node) -> Option<Node> {
@@ -803,12 +828,7 @@ impl TsParser {
         let name_node = args.named_child(0)?;
         let name = Self::string_value(name_node, source)?;
 
-        let body = if args.named_child_count() >= 2 {
-            let cb = args.named_child(1)?;
-            Self::func_body(cb)
-        } else {
-            None
-        };
+        let body = Self::find_callback_in_args(args).and_then(Self::func_body);
 
         let st = body.map_or_else(Analysis::default, |b| Self::analyze(b, source));
 
@@ -819,7 +839,7 @@ impl TsParser {
         // Detect done callback pattern (parameter named "done" in test callback)
         let has_done_callback = node
             .child_by_field_name("arguments")
-            .and_then(|args| args.named_child(1))
+            .and_then(|args| Self::find_callback_in_args(args))
             .is_some_and(|cb| Self::has_done_param(cb, source));
 
         Some(TestBlock {
@@ -981,7 +1001,7 @@ impl TsParser {
                             {
                                 let func_text =
                                     first_arg.utf8_text(source.as_bytes()).unwrap_or("");
-                                if func_text.starts_with("async") {
+                                if func_text.trim_start().starts_with("async") {
                                     st.has_async_expect_wrapper = true;
                                 }
                             }
@@ -1931,6 +1951,46 @@ test('with waitForTimeout', async ({ page }) => {
                 .iter()
                 .any(|c| c.call_name.contains("waitForTimeout")),
             "Expected waitForTimeout call to be tracked"
+        );
+    }
+
+    #[test]
+    fn parse_playwright_test_describe_only_creates_describe_block() {
+        let dir = write_temp(
+            r#"
+import { test, expect } from '@playwright/test';
+
+test.describe.only('focused group', () => {
+    test('inside', async ({ page }) => {
+        await expect(page).toHaveTitle(/app/);
+    });
+});
+"#,
+            "pw-describe-only.spec.ts",
+        );
+        let path = dir.path().join("pw-describe-only.spec.ts");
+        let parser = TsParser::new().unwrap();
+        let module = parser.parse_file(&path).unwrap();
+
+        assert_eq!(module.runtime, TestRuntime::Playwright);
+        assert_eq!(
+            module.describe_blocks.len(),
+            1,
+            "test.describe.only should create a DescribeBlock"
+        );
+        assert_eq!(module.describe_blocks[0].name, "focused group");
+        assert!(
+            module.describe_blocks[0].is_only,
+            "Describe block should have is_only = true"
+        );
+        assert_eq!(
+            module.test_blocks.len(),
+            1,
+            "Nested test should be parsed as TestBlock"
+        );
+        assert!(
+            !module.test_blocks[0].is_only,
+            "Nested test should NOT have is_only"
         );
     }
 }

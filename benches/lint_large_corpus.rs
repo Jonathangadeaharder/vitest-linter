@@ -200,7 +200,7 @@ fn bench_lint_corpus(c: &mut Criterion) {
                 // Setup: write files once before benchmark iterations.
                 let dir = TempDir::new().expect("tmpdir");
                 let paths = write_corpus(&dir, nf, tp);
-                let engine = LintEngine::new(false).expect("engine");
+                let engine = LintEngine::new(true).expect("engine");
 
                 b.iter(|| {
                     engine.lint_paths(&paths).expect("lint");
