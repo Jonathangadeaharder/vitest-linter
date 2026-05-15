@@ -4,3 +4,4 @@
   entry: vitest-linter
   language: rust
   files: '\.(test|spec)\.(ts|tsx|js|jsx)$'
+  types: [file]

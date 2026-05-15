@@ -1,0 +1,26 @@
+[
+  {
+    "rule_id": "VITEST-MNT-007",
+    "rule_name": "FocusedTestRule",
+    "severity": "Error",
+    "category": "Maintenance",
+    "message": "Focused describe 'focused group' uses .only — all other tests in this file will be skipped",
+    "file_path": "tests/fixtures/mnt_007_focused_test/playwright_test_only/input.spec.ts",
+    "line": 3,
+    "col": null,
+    "suggestion": "Remove .only before committing. Focused tests mask failures in CI",
+    "test_name": null
+  },
+  {
+    "rule_id": "VITEST-MNT-007",
+    "rule_name": "FocusedTestRule",
+    "severity": "Error",
+    "category": "Maintenance",
+    "message": "Focused test 'standalone focused test' uses .only — all other tests in this file will be skipped",
+    "file_path": "tests/fixtures/mnt_007_focused_test/playwright_test_only/input.spec.ts",
+    "line": 9,
+    "col": null,
+    "suggestion": "Remove .only before committing. Focused tests mask failures in CI",
+    "test_name": "standalone focused test"
+  }
+]

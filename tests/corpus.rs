@@ -14,13 +14,11 @@ use std::path::{Path, PathBuf};
 
 use vitest_linter::engine::LintEngine;
 
-#[allow(dead_code)]
 struct CorpusProject {
     name: &'static str,
     repo_url: &'static str,
     commit: &'static str,
     test_dirs: &'static [&'static str],
-    allowed_false_positive_rules: &'static [&'static str],
 }
 
 const VITEST_PROJECT: CorpusProject = CorpusProject {
@@ -28,7 +26,6 @@ const VITEST_PROJECT: CorpusProject = CorpusProject {
     repo_url: "https://github.com/vitest-dev/vitest.git",
     commit: "v3.1.2",
     test_dirs: &["test"],
-    allowed_false_positive_rules: &[],
 };
 
 const VUE_PROJECT: CorpusProject = CorpusProject {
@@ -36,7 +33,6 @@ const VUE_PROJECT: CorpusProject = CorpusProject {
     repo_url: "https://github.com/vuejs/core.git",
     commit: "v3.5.13",
     test_dirs: &["packages/vue/__tests__", "packages/reactivity/__tests__"],
-    allowed_false_positive_rules: &[],
 };
 
 const SVELTEKIT_PROJECT: CorpusProject = CorpusProject {
@@ -44,7 +40,6 @@ const SVELTEKIT_PROJECT: CorpusProject = CorpusProject {
     repo_url: "https://github.com/sveltejs/kit.git",
     commit: "5dc4f90c20a8a7a5c9254a7e0a86578a6f06c26d",
     test_dirs: &["packages/kit/test"],
-    allowed_false_positive_rules: &[],
 };
 
 fn corpus_cache_dir() -> PathBuf {
@@ -82,68 +77,56 @@ fn clone_or_update_project(project: &CorpusProject) -> PathBuf {
             }
         }
 
-        let _ = std::process::Command::new("git")
+        let status = std::process::Command::new("git")
             .args(["fetch", "--depth", "1", "origin", project.commit])
             .current_dir(&cache)
-            .status();
+            .status()
+            .expect("git fetch failed");
+        assert!(status.success(), "git fetch failed for {}", project.name);
 
-        let _ = std::process::Command::new("git")
+        let status = std::process::Command::new("git")
             .args(["checkout", project.commit])
             .current_dir(&cache)
-            .status();
+            .status()
+            .expect("git checkout failed");
+        assert!(status.success(), "git checkout failed for {}", project.name);
 
         return cache;
     }
 
     std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
 
-    let is_sha = project.commit.len() == 40
-        && project.commit.chars().all(|c| c.is_ascii_hexdigit());
+    let status = std::process::Command::new("git")
+        .args([
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            project.commit,
+            project.repo_url,
+            cache.to_str().unwrap(),
+        ])
+        .status();
 
-    if is_sha {
+    if status.is_err() || !status.unwrap().success() {
         let status = std::process::Command::new("git")
-            .args([
-                "clone",
-                "--depth",
-                "1",
-                project.repo_url,
-                cache.to_str().unwrap(),
-            ])
+            .args(["clone", project.repo_url, cache.to_str().unwrap()])
             .status()
             .expect("git clone failed — ensure git is installed and network is available");
 
         assert!(status.success(), "git clone failed for {}", project.name);
 
         let status = std::process::Command::new("git")
-            .args(["fetch", "--depth", "1", "origin", project.commit])
-            .current_dir(&cache)
-            .status()
-            .expect("git fetch failed");
-
-        assert!(status.success(), "git fetch failed for {}", project.name);
-
-        let status = std::process::Command::new("git")
-            .args(["checkout", "FETCH_HEAD"])
+            .args(["checkout", project.commit])
             .current_dir(&cache)
             .status()
             .expect("git checkout failed");
-
-        assert!(status.success(), "git checkout failed for {}", project.name);
-    } else {
-        let status = std::process::Command::new("git")
-            .args([
-                "clone",
-                "--depth",
-                "1",
-                "--branch",
-                project.commit,
-                project.repo_url,
-                cache.to_str().unwrap(),
-            ])
-            .status()
-            .expect("git clone failed — ensure git is installed and network is available");
-
-        assert!(status.success(), "git clone failed for {}", project.name);
+        assert!(
+            status.success(),
+            "git checkout of {} failed for {}",
+            project.commit,
+            project.name
+        );
     }
 
     cache
@@ -165,15 +148,16 @@ fn lint_corpus(project: &CorpusProject) -> (Vec<vitest_linter::models::Violation
         })
         .collect();
 
-    assert!(!paths.is_empty(), "No test directories found for {}", project.name);
+    assert!(
+        !paths.is_empty(),
+        "No test directories found for {}",
+        project.name
+    );
 
-    let engine = LintEngine::new().expect("Failed to create lint engine");
+    let engine = LintEngine::new(true).expect("Failed to create lint engine");
     let (violations, _) = engine.lint_paths(&paths).expect("Linting failed");
 
-    let file_count = paths
-        .iter()
-        .map(|p| count_test_files(p))
-        .sum();
+    let file_count = paths.iter().map(|p| count_test_files(p)).sum();
 
     (violations, file_count)
 }
@@ -190,6 +174,8 @@ fn count_test_files(dir: &Path) -> usize {
                 || name.ends_with(".spec.tsx")
                 || name.ends_with(".test.js")
                 || name.ends_with(".spec.js")
+                || name.ends_with(".test.jsx")
+                || name.ends_with(".spec.jsx")
         })
         .count()
 }
@@ -211,11 +197,17 @@ fn assert_no_panic(result: &(Vec<vitest_linter::models::Violation>, usize), proj
     );
 }
 
-fn print_summary(project_name: &str, violations: &[vitest_linter::models::Violation], file_count: usize) {
+fn print_summary(
+    project_name: &str,
+    violations: &[vitest_linter::models::Violation],
+    file_count: usize,
+) {
     let counts = summarize_violations(violations);
     eprintln!(
         "\n[{}] {} files, {} violations:",
-        project_name, file_count, violations.len()
+        project_name,
+        file_count,
+        violations.len()
     );
     let mut sorted: Vec<_> = counts.iter().collect();
     sorted.sort_by_key(|(_, c)| std::cmp::Reverse(*c));

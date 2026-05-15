@@ -119,6 +119,7 @@ pub struct TestBlock {
     pub has_conditional_logic: bool,
     pub has_try_catch: bool,
     pub uses_settimeout: bool,
+    pub uses_promise_settimeout: bool,
     pub uses_datemock: bool,
     pub has_multiple_expects: bool,
     pub is_skipped: bool,

@@ -23,3 +23,18 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "lint_large_corpus"
 harness = false
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[workspace.metadata.dist]
+cargo-dist-version = "0.28.0"
+ci = "github"
+installers = ["shell", "powershell", "npm"]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+install-path = "CARGO_HOME"
+install-update = true
+npm-package = "npm"
+merge-tarballs = true
+signing = "sigstore"

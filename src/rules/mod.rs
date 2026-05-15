@@ -51,6 +51,32 @@ pub mod require;
 pub mod selector_classifier;
 pub mod validation;
 
+/// The 8 community-hit rules active by default for v1.0.
+///
+/// These catch the most real-world pain with high signal and low false-positive
+/// rate. Use `all_rules()` for the full set (requires `--unstable-rules`).
+#[must_use]
+pub fn v1_0_rules() -> Vec<Box<dyn Rule>> {
+    vec![
+        // NoOnlyRule — it.only / describe.only left in committed code
+        Box::new(maintenance::FocusedTestRule),
+        // NoSkipRule — it.skip / test.todo left in source
+        Box::new(maintenance::EmptyTestRule),
+        // NoCommentedTestsRule — commented-out test bodies
+        Box::new(no_rules::NoCommentedOutTestsRule),
+        // AsyncWithoutAwaitRule — async test with no await (silent pass)
+        Box::new(maintenance::MissingAwaitAssertionRule),
+        // SetTimeoutInTestRule — real setTimeout in tests (flaky-time)
+        Box::new(flakiness::TimeoutRule),
+        // MissingExpectInTryRule — try block with no expect.fail in catch
+        Box::new(maintenance::TryCatchRule),
+        // SharedDescribeStateRule — conditional logic / state leakage in describe
+        Box::new(maintenance::ConditionalLogicRule),
+        // BeforeEachAfterFirstItRule — hooks declared after first test
+        Box::new(prefer::PreferHooksOnTopRule),
+    ]
+}
+
 #[must_use]
 pub fn all_rules() -> Vec<Box<dyn Rule>> {
     vec![
@@ -71,6 +97,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::MissingMockCleanupRule),
         Box::new(maintenance::WeakAssertionRule),
         Box::new(maintenance::ImplementationCoupledRule),
+        Box::new(maintenance::TestIdNegativePresenceRule),
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
@@ -134,7 +161,46 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 65);
+        assert_eq!(rules.len(), 66);
+    }
+
+    #[test]
+    fn v1_0_rules_count() {
+        let rules = v1_0_rules();
+        assert_eq!(rules.len(), 8);
+    }
+
+    #[test]
+    fn v1_0_rules_are_subset_of_all() {
+        let all = all_rules();
+        let v1 = v1_0_rules();
+        for rule in &v1 {
+            assert!(
+                all.iter().any(|r| r.id() == rule.id()),
+                "v1.0 rule {} not found in all_rules()",
+                rule.id()
+            );
+        }
+    }
+
+    #[test]
+    fn v1_0_rule_ids() {
+        let rules = v1_0_rules();
+        let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
+        let expected = [
+            "VITEST-MNT-007",  // FocusedTestRule (NoOnlyRule)
+            "VITEST-MNT-005",  // EmptyTestRule (NoSkipRule)
+            "VITEST-NO-003",   // NoCommentedOutTestsRule
+            "VITEST-MNT-006",  // MissingAwaitAssertionRule (AsyncWithoutAwaitRule)
+            "VITEST-FLK-001",  // TimeoutRule (SetTimeoutInTestRule)
+            "VITEST-MNT-004",  // TryCatchRule (MissingExpectInTryRule)
+            "VITEST-MNT-003",  // ConditionalLogicRule (SharedDescribeStateRule)
+            "VITEST-PREF-009", // PreferHooksOnTopRule (BeforeEachAfterFirstItRule)
+        ];
+        for id in &expected {
+            assert!(ids.contains(id), "Missing v1.0 rule: {}", id);
+        }
+        assert_eq!(ids.len(), expected.len());
     }
 
     #[test]
@@ -234,7 +300,7 @@ mod tests {
             .filter(|r| r.category() == Category::Validation)
             .collect();
         assert_eq!(flk.len(), 5);
-        assert_eq!(mnt.len(), 17);
+        assert_eq!(mnt.len(), 18);
         assert_eq!(str_.len(), 9);
         assert_eq!(dep.len(), 7);
         assert_eq!(val.len(), 14);
@@ -261,6 +327,7 @@ mod tests {
             ("VITEST-MNT-008", "MissingMockCleanupRule"),
             ("VITEST-MNT-009", "WeakAssertionRule"),
             ("VITEST-MNT-010", "ImplementationCoupledRule"),
+            ("VITEST-MNT-011", "TestIdNegativePresenceRule"),
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),

@@ -25,6 +25,9 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     incremental: bool,
 
+    #[arg(long, default_value_t = false)]
+    unstable_rules: bool,
+
     #[arg(long, default_value = "HEAD")]
     base: String,
 }
@@ -38,6 +41,7 @@ fn main() -> Result<()> {
         cli.output.as_deref(),
         cli.no_color,
         cli.incremental,
+        cli.unstable_rules,
         &cli.base,
     )?;
 

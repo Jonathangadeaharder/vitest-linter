@@ -4,7 +4,7 @@ A fast, zero-config test-smell linter for TypeScript/JavaScript Vitest test suit
 
 ## Features
 
-- **49 rules** across 5 categories: Flakiness, Maintenance, Structure, Dependencies, Validation
+- **8 must-have rules** active by default for v1.0 (65 total behind `--unstable-rules`)
 - Optional `.vitest-linter.toml` for project-specific banlists (DI rules)
 - Recursive file discovery via [walkdir](https://docs.rs/walkdir)
 - Tree-sitter-powered AST analysis (TypeScript **and** TSX/JSX)
@@ -43,14 +43,37 @@ vitest-linter --no-color
 # Incremental mode (only lint files changed since base ref)
 vitest-linter --incremental
 vitest-linter --incremental --base origin/main
+
+# Enable all rules (including unstable)
+vitest-linter --unstable-rules
 ```
 
 ## Rules
 
-> **49 rules** implemented across 5 categories. Numeric suffixes are kept in
-> parity with pytest-linter where a 1:1 semantic mapping exists. Rules are
-> organized by eslint-plugin-vitest category naming: VAL (Validation), NO
-> (No-*), PREF (Prefer-*), REQ (Require-*), CON (Consistency).
+> **8 must-have rules** active by default for v1.0. These catch the most
+> real-world pain (high signal, low false-positive). Pass `--unstable-rules`
+> to access the full set of 65 rules across 5 categories.
+
+### v1.0 Rules (active by default)
+
+These 8 rules are the community-hit set — the ones that catch real bugs in
+real codebases with minimal noise.
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-MNT-007 | FocusedTestRule | Error | `it.only` / `test.only` / `describe.only` left in source |
+| VITEST-MNT-005 | EmptyTestRule | Info | `it.skip` / `test.todo` left in source |
+| VITEST-NO-003 | NoCommentedOutTestsRule | Maintenance | Commented-out `it(` / `test(` / `describe(` lines |
+| VITEST-MNT-006 | MissingAwaitAssertionRule | Error | `.resolves` or `.rejects` assertion not preceded by `await` |
+| VITEST-FLK-001 | TimeoutRule | Warning | `setTimeout`/`setInterval` used inside a test without fake timers |
+| VITEST-MNT-004 | TryCatchRule | Warning | `try/catch` inside a test — prefer `expect().toThrow()` |
+| VITEST-MNT-003 | ConditionalLogicRule | Warning | `if` or `switch` statement inside a test body |
+| VITEST-PREF-009 | PreferHooksOnTopRule | Structure | Hooks should be placed above all test cases in a `describe` block |
+
+### Unstable Rules (`--unstable-rules`)
+
+The full rule set is available behind the `--unstable-rules` flag. These rules
+are still being validated against real-world repos and may produce false positives.
 
 ### Flakiness (VITEST-FLK-*)
 
