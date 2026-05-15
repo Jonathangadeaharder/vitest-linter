@@ -753,7 +753,6 @@ impl ImplementationCoupledRule {
             test_name: None,
         })
     }
-
 }
 
 pub struct TestIdNegativePresenceRule;
