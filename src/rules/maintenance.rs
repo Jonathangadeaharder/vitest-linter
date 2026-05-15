@@ -637,17 +637,9 @@ impl Rule for ImplementationCoupledRule {
         _ctx: &crate::rules::LintContext<'_>,
         graph: &ModuleGraph,
     ) -> Vec<Violation> {
-        let mut violations = Vec::new();
-
-        if let Some(v) = self.check_export_coupling(module, _ctx, graph) {
-            violations.push(v);
-        }
-
-        if let Some(v) = self.check_testid_negative_presence(module) {
-            violations.push(v);
-        }
-
-        violations
+        self.check_export_coupling(module, _ctx, graph)
+            .into_iter()
+            .collect()
     }
 }
 
@@ -703,10 +695,7 @@ impl ImplementationCoupledRule {
                 None
             });
 
-        let source_module = match source_module {
-            Some(m) => m,
-            None => return None,
-        };
+        let source_module = source_module?;
 
         let export_count = source_module.exports.len();
         let test_count = module.test_blocks.len();
@@ -765,7 +754,32 @@ impl ImplementationCoupledRule {
         })
     }
 
-    fn check_testid_negative_presence(&self, module: &ParsedModule) -> Option<Violation> {
+}
+
+pub struct TestIdNegativePresenceRule;
+
+impl Rule for TestIdNegativePresenceRule {
+    fn id(&self) -> &'static str {
+        "VITEST-MNT-011"
+    }
+    fn name(&self) -> &'static str {
+        "TestIdNegativePresenceRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Maintenance
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
         let pw_testid_count = module
             .playwright
             .as_ref()
@@ -777,7 +791,7 @@ impl ImplementationCoupledRule {
             })
             .unwrap_or(0);
         if pw_testid_count == 0 {
-            return None;
+            return vec![];
         }
         let has_negative = module
             .playwright
@@ -785,7 +799,7 @@ impl ImplementationCoupledRule {
             .map(|pw| pw.locator_chains.iter().any(|c| c.root == "queryByTestId"))
             .unwrap_or(false);
         if has_negative {
-            return None;
+            return vec![];
         }
         let first_line = module
             .playwright
@@ -797,7 +811,7 @@ impl ImplementationCoupledRule {
                     .map(|c| c.line)
             })
             .unwrap_or(1);
-        Some(Violation {
+        vec![Violation {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
             severity: self.severity(),
@@ -808,7 +822,7 @@ impl ImplementationCoupledRule {
             col: None,
             suggestion: Some("Add expect(queryByTestId('x')).toBeNull() or expect(getByTestId('x')).not.toBeVisible()".to_string()),
             test_name: None,
-        })
+        }]
     }
 }
 
