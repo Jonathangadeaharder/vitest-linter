@@ -97,6 +97,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(maintenance::MissingMockCleanupRule),
         Box::new(maintenance::WeakAssertionRule),
         Box::new(maintenance::ImplementationCoupledRule),
+        Box::new(maintenance::TestIdNegativePresenceRule),
         Box::new(dependencies::BannedModuleMockRule),
         Box::new(dependencies::ProductionSingletonImportRule),
         Box::new(dependencies::ResetEscapeHatchRule),
@@ -160,7 +161,7 @@ mod tests {
     #[test]
     fn all_rules_count() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 65);
+        assert_eq!(rules.len(), 66);
     }
 
     #[test]
@@ -299,7 +300,7 @@ mod tests {
             .filter(|r| r.category() == Category::Validation)
             .collect();
         assert_eq!(flk.len(), 5);
-        assert_eq!(mnt.len(), 17);
+        assert_eq!(mnt.len(), 18);
         assert_eq!(str_.len(), 9);
         assert_eq!(dep.len(), 7);
         assert_eq!(val.len(), 14);
@@ -326,6 +327,7 @@ mod tests {
             ("VITEST-MNT-008", "MissingMockCleanupRule"),
             ("VITEST-MNT-009", "WeakAssertionRule"),
             ("VITEST-MNT-010", "ImplementationCoupledRule"),
+            ("VITEST-MNT-011", "TestIdNegativePresenceRule"),
             ("VITEST-DEP-001", "BannedModuleMockRule"),
             ("VITEST-DEP-002", "ProductionSingletonImportRule"),
             ("VITEST-DEP-003", "ResetEscapeHatchRule"),

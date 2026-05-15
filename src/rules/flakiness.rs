@@ -28,20 +28,26 @@ impl Rule for TimeoutRule {
             .test_blocks
             .iter()
             .filter(|tb| tb.uses_settimeout)
-            .map(|tb| Violation {
-                rule_id: self.id().to_string(),
-                rule_name: self.name().to_string(),
-                severity: self.severity(),
-                category: self.category(),
-                message: "Test uses setTimeout which can cause timing-dependent flakiness"
-                    .to_string(),
-                file_path: tb.file_path.clone(),
-                line: tb.line,
-                col: None,
-                suggestion: Some(
-                    "Use vi.useFakeTimers() or vi.advanceTimersByTime() for deterministic time control".to_string(),
-                ),
-                test_name: Some(tb.name.clone()),
+            .map(|tb| {
+                let (message, suggestion) = if tb.uses_promise_settimeout {
+                    ("setTimeout wrapped in Promise causes non-deterministic delays — use fake timers or auto-retry assertions".to_string(),
+                     "Replace new Promise(r => setTimeout(r, N)) with vi.useFakeTimers() + vi.advanceTimersByTime() or auto-retry assertions".to_string())
+                } else {
+                    ("Test uses setTimeout which can cause timing-dependent flakiness".to_string(),
+                     "Use vi.useFakeTimers() or vi.advanceTimersByTime() for deterministic time control".to_string())
+                };
+                Violation {
+                    rule_id: self.id().to_string(),
+                    rule_name: self.name().to_string(),
+                    severity: self.severity(),
+                    category: self.category(),
+                    message,
+                    file_path: tb.file_path.clone(),
+                    line: tb.line,
+                    col: None,
+                    suggestion: Some(suggestion),
+                    test_name: Some(tb.name.clone()),
+                }
             })
             .collect()
     }

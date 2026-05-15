@@ -347,10 +347,13 @@ impl Rule for MissingAwaitAssertionRule {
         "MissingAwaitAssertionRule"
     }
     fn severity(&self) -> Severity {
-        Severity::Error
+        Severity::Warning
     }
     fn category(&self) -> Category {
         Category::Maintenance
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
     }
     fn check(
         &self,
@@ -625,14 +628,28 @@ impl Rule for ImplementationCoupledRule {
     fn category(&self) -> Category {
         Category::Maintenance
     }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
     fn check(
         &self,
         module: &ParsedModule,
         _ctx: &crate::rules::LintContext<'_>,
         graph: &ModuleGraph,
     ) -> Vec<Violation> {
-        // Only flag files that import exactly one production module.
-        // Allow relative imports (the graph resolves these); exclude test frameworks and packages.
+        self.check_export_coupling(module, _ctx, graph)
+            .into_iter()
+            .collect()
+    }
+}
+
+impl ImplementationCoupledRule {
+    fn check_export_coupling(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        graph: &ModuleGraph,
+    ) -> Option<Violation> {
         let prod_imports: Vec<&str> = module
             .imports_parsed
             .iter()
@@ -647,7 +664,7 @@ impl Rule for ImplementationCoupledRule {
             .collect();
 
         if prod_imports.len() != 1 {
-            return vec![];
+            return None;
         }
 
         // Resolve the source module from the graph and get its exports.
@@ -678,25 +695,20 @@ impl Rule for ImplementationCoupledRule {
                 None
             });
 
-        let source_module = match source_module {
-            Some(m) => m,
-            None => return vec![],
-        };
+        let source_module = source_module?;
 
         let export_count = source_module.exports.len();
         let test_count = module.test_blocks.len();
 
         if export_count == 0 || test_count == 0 {
-            return vec![];
+            return None;
         }
 
-        // Check ratio: test count should be within 0.8–1.2 of export count.
         let ratio = test_count as f64 / export_count as f64;
         if !(0.8..=1.2).contains(&ratio) {
-            return vec![];
+            return None;
         }
 
-        // Check if >80% of test names match export names (word-boundary match).
         let export_names: Vec<String> = source_module
             .exports
             .iter()
@@ -716,10 +728,10 @@ impl Rule for ImplementationCoupledRule {
 
         let match_ratio = matching as f64 / test_count as f64;
         if match_ratio < 0.8 {
-            return vec![];
+            return None;
         }
 
-        vec![Violation {
+        Some(Violation {
             rule_id: self.id().to_string(),
             rule_name: self.name().to_string(),
             severity: self.severity(),
@@ -738,6 +750,76 @@ impl Rule for ImplementationCoupledRule {
                 "Test behavior, not implementation details. Refactor tests to verify public API outcomes rather than mirroring export structure"
                     .to_string(),
             ),
+            test_name: None,
+        })
+    }
+}
+
+pub struct TestIdNegativePresenceRule;
+
+impl Rule for TestIdNegativePresenceRule {
+    fn id(&self) -> &'static str {
+        "VITEST-MNT-011"
+    }
+    fn name(&self) -> &'static str {
+        "TestIdNegativePresenceRule"
+    }
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+    fn category(&self) -> Category {
+        Category::Maintenance
+    }
+    fn applies_to_runtime(&self, _runtime: TestRuntime) -> bool {
+        true
+    }
+    fn check(
+        &self,
+        module: &ParsedModule,
+        _ctx: &crate::rules::LintContext<'_>,
+        _graph: &ModuleGraph,
+    ) -> Vec<Violation> {
+        let pw_testid_count = module
+            .playwright
+            .as_ref()
+            .map(|pw| {
+                pw.locator_chains
+                    .iter()
+                    .filter(|c| c.root == "getByTestId")
+                    .count()
+            })
+            .unwrap_or(0);
+        if pw_testid_count == 0 {
+            return vec![];
+        }
+        let has_negative = module
+            .playwright
+            .as_ref()
+            .map(|pw| pw.locator_chains.iter().any(|c| c.root == "queryByTestId"))
+            .unwrap_or(false);
+        if has_negative {
+            return vec![];
+        }
+        let first_line = module
+            .playwright
+            .as_ref()
+            .and_then(|pw| {
+                pw.locator_chains
+                    .iter()
+                    .find(|c| c.root == "getByTestId")
+                    .map(|c| c.line)
+            })
+            .unwrap_or(1);
+        vec![Violation {
+            rule_id: self.id().to_string(),
+            rule_name: self.name().to_string(),
+            severity: self.severity(),
+            category: self.category(),
+            message: "Test uses getByTestId but has no negative-presence assertion — missing coverage for element absence".to_string(),
+            file_path: module.file_path.clone(),
+            line: first_line,
+            col: None,
+            suggestion: Some("Add expect(queryByTestId('x')).toBeNull() or expect(getByTestId('x')).not.toBeVisible()".to_string()),
             test_name: None,
         }]
     }
