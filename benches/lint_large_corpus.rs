@@ -110,7 +110,7 @@ afterEach(() => {
 }
 
 /// Produces a source module file exporting named items.
-fn generate_source_module(name: &str, exports: &[&str]) -> String {
+fn generate_source_module(_name: &str, exports: &[&str]) -> String {
     let mut buf = String::new();
     for export in exports {
         buf.push_str(&format!("export function {export}() {{ return null; }}\n"));
@@ -200,7 +200,7 @@ fn bench_lint_corpus(c: &mut Criterion) {
                 // Setup: write files once before benchmark iterations.
                 let dir = TempDir::new().expect("tmpdir");
                 let paths = write_corpus(&dir, nf, tp);
-                let engine = LintEngine::new().expect("engine");
+                let engine = LintEngine::new(false).expect("engine");
 
                 b.iter(|| {
                     engine.lint_paths(&paths).expect("lint");

@@ -740,7 +740,6 @@ impl Rule for PwMissingAxeScanRule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::models::{LocatorChain, PlaywrightCall, PlaywrightModule};
     use crate::rules::LintContext;
     use std::path::PathBuf;
