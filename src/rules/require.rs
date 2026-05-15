@@ -42,7 +42,8 @@ impl Rule for RequireHookRule {
                 line: mock.line,
                 col: None,
                 suggestion: Some(
-                    "Use vi.doMock() with dynamic imports instead of top-level vi.mock()".to_string(),
+                    "Use vi.doMock() with dynamic imports instead of top-level vi.mock()"
+                        .to_string(),
                 ),
                 test_name: None,
             }]

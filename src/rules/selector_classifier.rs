@@ -127,6 +127,9 @@ mod tests {
 
     #[test]
     fn mixed_class_chains() {
-        assert_eq!(classify_selector("div.foo .bar"), SelectorClass::ChainedClass);
+        assert_eq!(
+            classify_selector("div.foo .bar"),
+            SelectorClass::ChainedClass
+        );
     }
 }
