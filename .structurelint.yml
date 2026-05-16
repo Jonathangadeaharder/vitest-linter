@@ -26,5 +26,3 @@ rules:
     - "*.tmp"
     - "*.bak"
     - ".DS_Store"
-
-  github-workflows: null
