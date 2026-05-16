@@ -122,3 +122,38 @@ jobs:
           violations=$(python3 -c "import json,sys; print(len(json.load(sys.stdin)))" < /tmp/vitest-result.json)
           echo "vitest-linter found $violations violations"
           [ "$violations" -gt 0 ]
+
+  repo-structure:
+    name: Repo Structure
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Build structurelint
+        run: |
+          git clone --depth 1 https://github.com/Jonathangadeaharder/structurelint.git /tmp/structurelint
+          cd /tmp/structurelint && go build -o /usr/local/bin/structurelint ./cmd/structurelint
+      - name: Run structurelint
+        run: structurelint .
+
+  required-checks:
+    name: required-checks
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    needs: [fmt, clippy, test, coverage, audit, dogfood, repo-structure]
+    if: always()
+    steps:
+      - name: Verify all jobs passed
+        run: |
+          if [ "${{ needs.fmt.result }}" != "success" ] || \
+             [ "${{ needs.clippy.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.coverage.result }}" != "success" ] || \
+             [ "${{ needs.audit.result }}" != "success" ] || \
+             [ "${{ needs.dogfood.result }}" != "success" ] || \
+             [ "${{ needs.repo-structure.result }}" != "success" ]; then
+            echo "One or more CI jobs failed."
+            exit 1
+          fi
+          echo "All CI jobs passed."

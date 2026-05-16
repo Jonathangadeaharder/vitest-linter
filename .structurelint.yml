@@ -1,0 +1,30 @@
+root: true
+
+exclude:
+  - target/**
+  - .git/**
+  - mutants.out.old/**
+
+rules:
+  max-depth:
+    max: 5
+    exemptions:
+      - ".git/**"
+      - "target/**"
+
+  max-files-in-dir:
+    max: 30
+
+  max-subdirs:
+    max: 15
+
+  file-existence:
+    "README.md":
+      rule: "exists:1"
+
+  disallowed-patterns:
+    - "*.tmp"
+    - "*.bak"
+    - ".DS_Store"
+
+  github-workflows: null
