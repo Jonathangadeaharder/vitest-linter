@@ -8,7 +8,7 @@ Zero-config test-smell diagnostics for Vitest projects, directly in VS Code.
 
 - Activates automatically when editing test files (`.test.ts`, `.spec.ts`, `.test.js`, etc.)
 - Runs [vitest-linter](https://github.com/Jonathangadeaharder/vitest-linter) on save (or on type) and shows diagnostics in the Problems panel
-- Supports 49 lint rules across flakiness, maintenance, structure, dependencies, and validation categories
+- Supports 65+ lint rules across flakiness, maintenance, structure, dependencies, validation, and Playwright categories
 - Configurable rule severity overrides, include/exclude globs, and run trigger
 
 ## Prerequisites
