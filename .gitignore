@@ -1,4 +1,8 @@
 target/
 .DS_Store
 mutants.out/
+mutants.out.old/
+coverage/
+*.lcov
+*.lockfile
 .worktrees/

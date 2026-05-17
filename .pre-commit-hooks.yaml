@@ -1,6 +1,0 @@
-- id: vitest-linter
-  name: vitest-linter
-  description: Detect test smells in Vitest/TypeScript test files
-  entry: vitest-linter
-  language: rust
-  files: '\.(test|spec)\.(ts|tsx|js|jsx)$'
