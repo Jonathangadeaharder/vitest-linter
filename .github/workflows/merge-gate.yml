@@ -1,0 +1,107 @@
+name: Merge Gate
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  repo-hygiene:
+    name: Repo Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for iCloud sync conflicts
+        run: |
+          if find . -path ./node_modules -prune -o -path ./.git -prune -o -name "* [0-9]*" -print | grep -q .; then
+            echo "::error::iCloud sync conflicts detected"
+            find . -path ./node_modules -prune -o -path ./.git -prune -o -name "* [0-9]*" -print
+            exit 1
+          fi
+
+  rust-quality:
+    name: Rust Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Check format
+        run: cargo fmt --check
+      - name: Clippy lint
+        run: cargo clippy -- -D warnings
+      - name: Build
+        run: cargo build
+      - name: Tests
+        run: cargo test
+
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+          ignore-unfixed: true
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  required-checks:
+    name: Required Checks (Merge)
+    runs-on: ubuntu-latest
+    needs:
+      - repo-hygiene
+      - rust-quality
+      - dependency-scan
+      - secret-scanning
+      - codeql
+    if: always()
+    steps:
+      - name: Verify all merge gate jobs passed
+        run: |
+          if [ "${{ needs.repo-hygiene.result }}" != "success" ] || \
+             [ "${{ needs.rust-quality.result }}" != "success" ] || \
+             [ "${{ needs.dependency-scan.result }}" != "success" ] || \
+             [ "${{ needs.secret-scanning.result }}" != "success" ] || \
+             [ "${{ needs.codeql.result }}" != "success" ]; then
+            echo "One or more merge gate jobs failed."
+            exit 1
+          fi
+          echo "All merge gate jobs passed."
