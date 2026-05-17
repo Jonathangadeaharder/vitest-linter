@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   pr-agent:
-    runs-on: self-hosted
+    runs-on: ["self-hosted", "python", "macos"]
     permissions:
       contents: read
       pull-requests: write

@@ -1,7 +1,23 @@
-# ADR-003: Quality Gates
+---
+id: ADR-003
+kind: adr
+title: Quality Gates
+status: draft
+date: 2026-05-17T00:00:00.000Z
+authors: []
+reviewers: []
+tags: []
+supersedes: []
+superseded_by: []
+depends_on: []
+blocks: []
+implements: []
+related: []
+external: []
+project: vitest-linter
+checksum: 36b987bd12e1f38abe04b2d19cd94123ba409ba446a761f360c41ddfb4152462
+---
 
-**Status:** Accepted  
-**Date:** 2026-05-17  
 **Deciders:** @Jonathangadeaharder
 
 ## Context

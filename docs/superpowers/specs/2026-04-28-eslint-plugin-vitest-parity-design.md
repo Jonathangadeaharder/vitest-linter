@@ -1,3 +1,6 @@
+---
+checksum: 9acb7a7abd1933ffaf0867ee32ecafc699f7f78f5e386c0353490869e4b3d423
+---
 # Vitest-Linter Parity with eslint-plugin-vitest
 
 ## Goal

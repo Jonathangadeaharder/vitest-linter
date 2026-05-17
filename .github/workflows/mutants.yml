@@ -11,7 +11,7 @@ permissions:
 jobs:
   mutants:
     name: Cargo Mutants
-    runs-on: self-hosted
+    runs-on: ["self-hosted", "rust", "macos"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

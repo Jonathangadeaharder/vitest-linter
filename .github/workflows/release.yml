@@ -55,7 +55,7 @@ jobs:
   publish:
     name: Create GitHub Release + publish npm
     needs: dist
-    runs-on: self-hosted
+    runs-on: ["self-hosted", "rust", "macos"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

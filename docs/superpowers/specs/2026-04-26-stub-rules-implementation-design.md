@@ -1,3 +1,6 @@
+---
+checksum: 0d505504a8745510fc551afac254e5c9f0a07a43c18947eb433e297dbaf2e305
+---
 # Design: Implementing 8 Stub Rules via Parser Model Enrichment
 
 **Date:** 2026-04-26  

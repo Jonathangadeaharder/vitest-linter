@@ -13,7 +13,7 @@ permissions:
 jobs:
   fmt:
     name: Format
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -25,7 +25,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -37,7 +37,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -47,7 +47,7 @@ jobs:
 
   coverage:
     name: Coverage
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
@@ -66,7 +66,7 @@ jobs:
 
   audit:
     name: Audit
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -80,7 +80,7 @@ jobs:
     name: SonarCloud
     needs: coverage
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "security", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,7 +97,7 @@ jobs:
   dogfood:
     name: Dogfood
     needs: test
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -140,7 +140,7 @@ jobs:
 
   required-checks:
     name: required-checks
-    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'push' && '["self-hosted", "rust", "macos"]' || 'ubuntu-latest' }}
     needs: [fmt, clippy, test, coverage, audit, dogfood, repo-structure]
     if: always()
     steps:

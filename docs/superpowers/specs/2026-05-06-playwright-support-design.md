@@ -1,3 +1,6 @@
+---
+checksum: 5cd639928627d157044e6b3b2ca6597567a1aea6799c1c85bb8182346f30c457
+---
 # Design: Playwright E2E Test Linting + Rule Hardening
 
 **Date:** 2026-05-06  

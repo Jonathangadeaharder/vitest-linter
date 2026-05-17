@@ -1,7 +1,23 @@
-# ADR-001: Project Architecture
+---
+id: ADR-001
+kind: adr
+title: Project Architecture
+status: draft
+date: 2026-05-17T00:00:00.000Z
+authors: []
+reviewers: []
+tags: []
+supersedes: []
+superseded_by: []
+depends_on: []
+blocks: []
+implements: []
+related: []
+external: []
+project: vitest-linter
+checksum: 733c0c0e84b7d2d45ea35d0d039128ddbbd5921a24f40ecaae76b13ad35a9c40
+---
 
-**Status:** Accepted  
-**Date:** 2026-05-17  
 **Deciders:** @Jonathangadeaharder
 
 ## Context

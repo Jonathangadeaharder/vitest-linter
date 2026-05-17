@@ -1,7 +1,23 @@
-# ADR-004: Testing Strategy
+---
+id: ADR-004
+kind: adr
+title: Testing Strategy
+status: draft
+date: 2026-05-17T00:00:00.000Z
+authors: []
+reviewers: []
+tags: []
+supersedes: []
+superseded_by: []
+depends_on: []
+blocks: []
+implements: []
+related: []
+external: []
+project: vitest-linter
+checksum: ea802cc14c8f64a0a15ddd317a89b5afaf1505e068b42b8924cc5ff5f2cf5d8d
+---
 
-**Status:** Accepted  
-**Date:** 2026-05-17  
 **Deciders:** @Jonathangadeaharder
 
 ## Context

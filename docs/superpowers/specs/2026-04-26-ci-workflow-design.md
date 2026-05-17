@@ -1,3 +1,6 @@
+---
+checksum: 46e99eea84b61cd44f3df87cbf76224a760e3fee67dcfe587bbc1621631018dc
+---
 # Design: Rust CI Workflow for pytest-linter/vitest-linter
 
 **Date:** 2026-04-26  

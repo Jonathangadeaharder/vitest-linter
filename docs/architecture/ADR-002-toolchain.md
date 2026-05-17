@@ -1,7 +1,23 @@
-# ADR-002: Toolchain
+---
+id: ADR-002
+kind: adr
+title: Toolchain
+status: draft
+date: 2026-05-17T00:00:00.000Z
+authors: []
+reviewers: []
+tags: []
+supersedes: []
+superseded_by: []
+depends_on: []
+blocks: []
+implements: []
+related: []
+external: []
+project: vitest-linter
+checksum: 538c952ff7c39807f3e8fa371c91788f88c9035ac088772bd14ea53791f2f5ef
+---
 
-**Status:** Accepted  
-**Date:** 2026-05-17  
 **Deciders:** @Jonathangadeaharder
 
 ## Context

@@ -1,3 +1,6 @@
+---
+checksum: ac2777ba9994e7720840b8641bfffc7fd980892c2e2806805c78f700305de7c6
+---
 # Spec: Async Assertion Support in Vitest Linter
 
 Enhance the linter to detect unawaited async assertions in Vitest tests.

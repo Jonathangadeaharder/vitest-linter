@@ -13,7 +13,7 @@ permissions:
 jobs:
   lint-tests:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ["self-hosted", "rust", "macos"]
     steps:
       - uses: actions/checkout@v4
         with:

@@ -1,7 +1,23 @@
-# ADR-005: Lint Rule Architecture
+---
+id: ADR-005
+kind: adr
+title: Lint Rule Architecture
+status: draft
+date: 2026-05-17T00:00:00.000Z
+authors: []
+reviewers: []
+tags: []
+supersedes: []
+superseded_by: []
+depends_on: []
+blocks: []
+implements: []
+related: []
+external: []
+project: vitest-linter
+checksum: b214362d6987fe751115cbc3df4fc0ce295f5d5de5fab18f38abed0515be943e
+---
 
-**Status:** Accepted  
-**Date:** 2026-05-17  
 **Deciders:** @Jonathangadeaharder
 
 ## Context
