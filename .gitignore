@@ -6,3 +6,5 @@ coverage/
 *.lcov
 *.lockfile
 .worktrees/
+.codex/
+openspec/

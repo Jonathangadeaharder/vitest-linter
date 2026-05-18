@@ -22,6 +22,11 @@ rules:
     "README.md":
       rule: "exists:1"
 
+  deploy-action: false
+  mandatory-linters:
+    - structurelint
+    - cargo-test-lint
+
   disallowed-patterns:
     - "*.tmp"
     - "*.bak"
