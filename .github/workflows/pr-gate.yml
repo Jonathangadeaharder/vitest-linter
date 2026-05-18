@@ -14,7 +14,8 @@ concurrency:
 jobs:
   repo-hygiene:
     name: Repo Hygiene
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - name: Check for iCloud sync conflicts
@@ -27,7 +28,8 @@ jobs:
 
   rust-quality:
     name: Rust Quality
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -45,47 +47,78 @@ jobs:
 
   dependency-scan:
     name: Dependency Scan
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: brew install aquasecurity/trivy/trivy
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-          ignore-unfixed: true
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed .
 
   secret-scanning:
     name: Secret Scanning
-    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install gitleaks
+        run: brew install gitleaks
+      - name: Run gitleaks
+        run: gitleaks detect --verbose
+
+  structure:
+    name: Repository Structure
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Build structurelint
+        run: |
+          git clone https://github.com/Jonathangadeaharder/structurelint.git /tmp/structurelint
+          cd /tmp/structurelint && git checkout 209f4230d04e04dd4bb2f3e0eeb5e2aefaa56102
+          go build -o /usr/local/bin/structurelint ./cmd/structurelint
+      - name: Run structurelint
+        run: structurelint .
+      - name: Cleanup structurelint build
+        if: always()
+        run: rm -rf /tmp/structurelint
+
+  cargo-test-lint:
+    name: Test Quality (Rust)
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-test-lint
+        run: cargo install cargo-test-lint
+      - name: Run cargo-test-lint
+        run: cargo test-lint
 
   required-checks:
     name: Required Checks (PR)
-    runs-on: ubuntu-latest
+    runs-on: ["self-hosted", "macOS", "X64"]
     needs:
       - repo-hygiene
       - rust-quality
       - dependency-scan
       - secret-scanning
+      - structure
+      - cargo-test-lint
     if: always()
     steps:
       - name: Verify all PR gate jobs passed
         run: |
-          if [ "${{ needs.repo-hygiene.result }}" != "success" ] || \
-             [ "${{ needs.rust-quality.result }}" != "success" ] || \
-             [ "${{ needs.dependency-scan.result }}" != "success" ] || \
-             [ "${{ needs.secret-scanning.result }}" != "success" ]; then
-            echo "One or more PR gate jobs failed."
-            exit 1
-          fi
-          echo "All PR gate jobs passed."
+          for JOB in ${{ join(needs.*.result, ' ') }}; do
+            if [ "$JOB" != "success" ] && [ "$JOB" != "skipped" ]; then
+              echo "❌ Job failed: $JOB"
+              exit 1
+            fi
+          done
+          echo "✅ All checks passed"

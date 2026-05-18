@@ -58,7 +58,7 @@ pub struct Config {
 }
 
 /// Per-rule severity overrides and enable/disable settings.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RulesConfig {
     /// Per-rule severity overrides. Key = rule ID, value = "off" | "info" | "warning" | "error"
     pub select: HashMap<String, String>,
@@ -230,6 +230,7 @@ impl Default for Config {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for RulesConfig {
     fn default() -> Self {
         Self {
