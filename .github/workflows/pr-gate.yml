@@ -14,7 +14,8 @@ concurrency:
 jobs:
   repo-hygiene:
     name: Repo Hygiene
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - name: Check for iCloud sync conflicts
@@ -27,7 +28,8 @@ jobs:
 
   rust-quality:
     name: Rust Quality
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -45,7 +47,8 @@ jobs:
 
   dependency-scan:
     name: Dependency Scan
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - name: Install Trivy
@@ -55,7 +58,8 @@ jobs:
 
   secret-scanning:
     name: Secret Scanning
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,7 +71,8 @@ jobs:
 
   structure:
     name: Repository Structure
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -75,8 +80,9 @@ jobs:
           go-version: "1.24"
       - name: Build structurelint
         run: |
-          git clone --depth 1 https://github.com/Jonathangadeaharder/structurelint.git /tmp/structurelint
-          cd /tmp/structurelint && go build -o /usr/local/bin/structurelint ./cmd/structurelint
+          git clone https://github.com/Jonathangadeaharder/structurelint.git /tmp/structurelint
+          cd /tmp/structurelint && git checkout 209f4230d04e04dd4bb2f3e0eeb5e2aefaa56102
+          go build -o /usr/local/bin/structurelint ./cmd/structurelint
       - name: Run structurelint
         run: structurelint .
       - name: Cleanup structurelint build
@@ -85,7 +91,8 @@ jobs:
 
   cargo-test-lint:
     name: Test Quality (Rust)
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ["self-hosted", "macOS", "X64"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -96,7 +103,7 @@ jobs:
 
   required-checks:
     name: Required Checks (PR)
-    runs-on: ["self-hosted", "macos", "arm64", "VidiomTM"]
+    runs-on: ["self-hosted", "macOS", "X64"]
     needs:
       - repo-hygiene
       - rust-quality
