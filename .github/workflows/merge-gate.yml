@@ -83,6 +83,18 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
+  sonarcloud:
+    name: SonarCloud Code Analysis
+    runs-on: ["self-hosted", "macOS", "X64"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   required-checks:
     name: Required Checks (Merge)
     runs-on: ["self-hosted", "macOS", "X64"]
@@ -92,6 +104,7 @@ jobs:
       - dependency-scan
       - secret-scanning
       - codeql
+      - sonarcloud
     if: always()
     steps:
       - name: Verify all merge gate jobs passed
@@ -100,7 +113,8 @@ jobs:
              [ "${{ needs.rust-quality.result }}" != "success" ] || \
              [ "${{ needs.dependency-scan.result }}" != "success" ] || \
              [ "${{ needs.secret-scanning.result }}" != "success" ] || \
-             [ "${{ needs.codeql.result }}" != "success" ]; then
+             [ "${{ needs.codeql.result }}" != "success" ] || \
+             [ "${{ needs.sonarcloud.result }}" != "success" ]; then
             echo "One or more merge gate jobs failed."
             exit 1
           fi
