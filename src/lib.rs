@@ -13,7 +13,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use engine::LintEngine;
-use models::Severity;
+use models::{Diagnostic, Severity};
 
 fn get_changed_files(base: &str) -> Result<Vec<PathBuf>> {
     let output = std::process::Command::new("git")
@@ -78,79 +78,97 @@ pub fn run_cli(
     let engine = LintEngine::new(unstable_rules)?;
     let (violations, diagnostics) = engine.lint_paths(&effective_paths)?;
 
-    if format == "json" {
-        let json = serde_json::to_string_pretty(&violations)?;
-        match output {
-            Some(path) => fs::write(path, json)?,
-            None => println!("{json}"),
-        }
-    } else if format == "sarif" {
-        let sarif = build_sarif(&violations);
-        let json = serde_json::to_string_pretty(&sarif)?;
-        match output {
-            Some(path) => fs::write(path, json)?,
-            None => println!("{json}"),
-        }
-    } else {
-        let mut out: Box<dyn Write> = match output {
-            Some(path) => Box::new(fs::File::create(path)?),
-            None => Box::new(std::io::stdout()),
-        };
-
-        for diag in &diagnostics {
-            writeln!(out, "{}: {}", "Info".blue().bold(), diag.message)?;
-        }
-
-        if violations.is_empty() {
-            writeln!(out, "{} No test smells detected.", "\u{2713}".green())?;
-        } else {
-            for v in &violations {
-                let severity_str = match v.severity {
-                    Severity::Error => "Error".red().bold().to_string(),
-                    Severity::Warning => "Warning".yellow().bold().to_string(),
-                    Severity::Info => "Info".blue().bold().to_string(),
-                };
-                writeln!(
-                    out,
-                    "{}: {} in {}:{}",
-                    severity_str,
-                    v.rule_id.cyan(),
-                    v.file_path.display().to_string().white(),
-                    v.line
-                )?;
-                writeln!(out, "  {}", v.message)?;
-                if let Some(ref suggestion) = v.suggestion {
-                    writeln!(out, "  {} {}", "Suggestion:".dimmed(), suggestion.dimmed())?;
-                }
-                writeln!(out)?;
-            }
-
-            let errors = violations
-                .iter()
-                .filter(|v| v.severity == Severity::Error)
-                .count();
-            let warnings = violations
-                .iter()
-                .filter(|v| v.severity == Severity::Warning)
-                .count();
-            let infos = violations
-                .iter()
-                .filter(|v| v.severity == Severity::Info)
-                .count();
-
-            writeln!(
-                out,
-                "Found {} violation(s): {} error(s), {} warning(s), {} info",
-                violations.len(),
-                errors,
-                warnings,
-                infos
-            )?;
-        }
+    match format {
+        "json" => output_json(&violations, output)?,
+        "sarif" => output_sarif(&violations, output)?,
+        _ => output_human(&violations, &diagnostics, output)?,
     }
 
     let has_errors = violations.iter().any(|v| v.severity == Severity::Error);
     Ok(has_errors)
+}
+
+fn output_json(violations: &[models::Violation], output: Option<&Path>) -> Result<()> {
+    let json = serde_json::to_string_pretty(violations)?;
+    match output {
+        Some(path) => fs::write(path, json)?,
+        None => println!("{json}"),
+    }
+    Ok(())
+}
+
+fn output_sarif(violations: &[models::Violation], output: Option<&Path>) -> Result<()> {
+    let sarif = build_sarif(violations);
+    let json = serde_json::to_string_pretty(&sarif)?;
+    match output {
+        Some(path) => fs::write(path, json)?,
+        None => println!("{json}"),
+    }
+    Ok(())
+}
+
+fn output_human(
+    violations: &[models::Violation],
+    diagnostics: &[Diagnostic],
+    output: Option<&Path>,
+) -> Result<()> {
+    let mut out: Box<dyn Write> = match output {
+        Some(path) => Box::new(fs::File::create(path)?),
+        None => Box::new(std::io::stdout()),
+    };
+
+    for diag in diagnostics {
+        writeln!(out, "{}: {}", "Info".blue().bold(), diag.message)?;
+    }
+
+    if violations.is_empty() {
+        writeln!(out, "{} No test smells detected.", "\u{2713}".green())?;
+    } else {
+        for v in violations {
+            let severity_str = match v.severity {
+                Severity::Error => "Error".red().bold().to_string(),
+                Severity::Warning => "Warning".yellow().bold().to_string(),
+                Severity::Info => "Info".blue().bold().to_string(),
+            };
+            writeln!(
+                out,
+                "{}: {} in {}:{}",
+                severity_str,
+                v.rule_id.cyan(),
+                v.file_path.display().to_string().white(),
+                v.line
+            )?;
+            writeln!(out, "  {}", v.message)?;
+            if let Some(ref suggestion) = v.suggestion {
+                writeln!(out, "  {} {}", "Suggestion:".dimmed(), suggestion.dimmed())?;
+            }
+            writeln!(out)?;
+        }
+
+        let errors = violations
+            .iter()
+            .filter(|v| v.severity == Severity::Error)
+            .count();
+        let warnings = violations
+            .iter()
+            .filter(|v| v.severity == Severity::Warning)
+            .count();
+        let infos = violations
+            .iter()
+            .filter(|v| v.severity == Severity::Info)
+            .count();
+
+        writeln!(
+            out,
+            "Found {} violation(s): {} error(s), {} warning(s), {} info",
+            violations.len(),
+            errors,
+            warnings,
+            infos
+        )?;
+    }
+
+    Ok(())
 }
 
 fn build_sarif(violations: &[models::Violation]) -> serde_json::Value {

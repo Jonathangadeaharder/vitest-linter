@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 use crate::config::{Config, TsConfig};
 use crate::models::{Diagnostic, ModuleGraph, ParsedModule, Violation};
 use crate::parser::TsParser;
-use crate::rules::{all_rules, v1_0_rules, LintContext};
+use crate::rules::{all_rules, v1_0_rules, LintContext, Rule};
 use crate::suppression::SuppressionMap;
 
 /// Top-level linting engine that coordinates file discovery, parsing, rule
@@ -79,6 +79,34 @@ impl LintEngine {
         let files = Self::discover_files(paths);
 
         // Phase 1: Parse test files in parallel
+        let (modules, sources) = self.parse_files(&files);
+
+        // Discover source modules referenced by imports
+        let source_modules = Self::discover_source_modules(&modules);
+
+        // Build module graph
+        let graph = ModuleGraph::new(&modules, &source_modules);
+
+        // Group modules by their resolved config root
+        let groups = Self::group_by_config(&modules);
+
+        let rules = if self.unstable_rules {
+            all_rules()
+        } else {
+            v1_0_rules()
+        };
+
+        // Pre-parse suppression maps once per file
+        let suppressions = pre_parse_suppressions(&sources);
+
+        // Phase 2: Rule evaluation with shared ModuleGraph
+        let violations = evaluate_rules(&groups, &rules, &modules, &suppressions, &graph);
+
+        Ok((violations, Vec::new()))
+    }
+
+    /// Phase 1: parse test files in parallel, returning modules and their source text.
+    fn parse_files(&self, files: &[PathBuf]) -> (Vec<ParsedModule>, Vec<String>) {
         let parsed: Vec<_> = files
             .par_iter()
             .filter_map(|file| {
@@ -94,14 +122,13 @@ impl LintEngine {
             modules.push(module);
             sources.push(source);
         }
+        (modules, sources)
+    }
 
-        // Discover source modules referenced by imports
-        let source_modules = Self::discover_source_modules(&modules);
-
-        // Build module graph
-        let graph = ModuleGraph::new(&modules, &source_modules);
-
-        // Group modules by their resolved config root
+    /// Group modules by their resolved config root directory.
+    fn group_by_config(
+        modules: &[ParsedModule],
+    ) -> HashMap<PathBuf, (Config, Vec<usize>)> {
         let mut groups: HashMap<PathBuf, (Config, Vec<usize>)> = HashMap::new();
         for (idx, module) in modules.iter().enumerate() {
             let config_root = Self::resolve_config_root(&module.file_path);
@@ -111,63 +138,7 @@ impl LintEngine {
             });
             entry.1.push(idx);
         }
-
-        let rules = if self.unstable_rules {
-            all_rules()
-        } else {
-            v1_0_rules()
-        };
-        let mut violations = Vec::new();
-        let diagnostics = Vec::new();
-
-        // Pre-parse suppression maps once per file
-        let suppressions: Vec<SuppressionMap> =
-            sources.iter().map(|s| SuppressionMap::parse(s)).collect();
-
-        // Phase 2: Rule evaluation with shared ModuleGraph
-        for (config, indices) in groups.values() {
-            let group_modules: Vec<ParsedModule> =
-                indices.iter().map(|i| modules[*i].clone()).collect();
-            let ctx = LintContext {
-                config,
-                all_modules: &group_modules,
-            };
-            for rule in &rules {
-                if config.rules.is_disabled(rule.id()) {
-                    continue;
-                }
-                for (local_idx, module) in group_modules.iter().enumerate() {
-                    if !rule.applies_to_runtime(module.runtime) {
-                        continue;
-                    }
-                    let global_idx = indices[local_idx];
-                    let mut v = rule.check(module, &ctx, &graph);
-                    if let Some(override_sev) = config.rules.severity_override(rule.id()) {
-                        for violation in &mut v {
-                            violation.severity = match override_sev.to_ascii_lowercase().as_str() {
-                                "error" => crate::models::Severity::Error,
-                                "warning" => crate::models::Severity::Warning,
-                                "info" => crate::models::Severity::Info,
-                                _ => violation.severity,
-                            };
-                        }
-                    }
-                    let suppression = &suppressions[global_idx];
-                    v.retain(|violation| {
-                        !suppression.is_suppressed(violation.line, &violation.rule_id)
-                    });
-                    violations.append(&mut v);
-                }
-            }
-        }
-
-        violations.sort_by(|a, b| {
-            a.file_path
-                .cmp(&b.file_path)
-                .then_with(|| a.line.cmp(&b.line))
-        });
-
-        Ok((violations, diagnostics))
+        groups
     }
 
     /// Walk up from the module's path to find the directory containing
@@ -229,47 +200,10 @@ impl LintEngine {
     /// Discover source modules referenced by imports in test files.
     /// Skips node_modules and external packages.
     fn discover_source_modules(modules: &[ParsedModule]) -> Vec<ParsedModule> {
-        let mut source_files = Vec::new();
-
-        for module in modules {
-            // Collect sources from both imports and vi.mock() calls
-            let mut sources: Vec<&str> = Vec::new();
-            for imp in &module.imports_parsed {
-                sources.push(&imp.source);
-            }
-            for mock in &module.vi_mocks {
-                if !sources.contains(&mock.source.as_str()) {
-                    sources.push(&mock.source);
-                }
-            }
-
-            for source in &sources {
-                // Skip external packages
-                if !source.starts_with('.') && !source.starts_with('/') {
-                    continue;
-                }
-                // Try to resolve the import to a file
-                if let Some(parent) = module.file_path.parent() {
-                    let base = parent.join(source);
-                    let exts = [".ts", ".tsx", ".js", ".jsx"];
-                    for ext in &exts {
-                        let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
-                        if candidate.is_file() {
-                            source_files.push(candidate);
-                            break;
-                        }
-                    }
-                    // Try index files
-                    for name in &["index.ts", "index.tsx", "index.js", "index.jsx"] {
-                        let candidate = base.join(name);
-                        if candidate.is_file() {
-                            source_files.push(candidate);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        let mut source_files: Vec<PathBuf> = modules
+            .iter()
+            .flat_map(collect_source_paths)
+            .collect();
 
         source_files.sort();
         source_files.dedup();
@@ -286,6 +220,131 @@ impl LintEngine {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: rule evaluation
+// ---------------------------------------------------------------------------
+
+/// Evaluate all rules against grouped modules, applying severity overrides and
+/// suppression filtering. Returns sorted violations.
+fn evaluate_rules(
+    groups: &HashMap<PathBuf, (Config, Vec<usize>)>,
+    rules: &[Box<dyn Rule>],
+    modules: &[ParsedModule],
+    suppressions: &[SuppressionMap],
+    graph: &ModuleGraph,
+) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for (config, indices) in groups.values() {
+        let group_modules: Vec<ParsedModule> =
+            indices.iter().map(|i| modules[*i].clone()).collect();
+        let ctx = LintContext {
+            config,
+            all_modules: &group_modules,
+        };
+        for rule in rules {
+            if config.rules.is_disabled(rule.id()) {
+                continue;
+            }
+            for (local_idx, module) in group_modules.iter().enumerate() {
+                if !rule.applies_to_runtime(module.runtime) {
+                    continue;
+                }
+                let global_idx = indices[local_idx];
+                let mut v = rule.check(module, &ctx, graph);
+                if let Some(override_sev) = config.rules.severity_override(rule.id()) {
+                    for violation in &mut v {
+                        violation.severity = match override_sev.to_ascii_lowercase().as_str() {
+                            "error" => crate::models::Severity::Error,
+                            "warning" => crate::models::Severity::Warning,
+                            "info" => crate::models::Severity::Info,
+                            _ => violation.severity,
+                        };
+                    }
+                }
+                let suppression = &suppressions[global_idx];
+                v.retain(|violation| {
+                    !suppression.is_suppressed(violation.line, &violation.rule_id)
+                });
+                violations.append(&mut v);
+            }
+        }
+    }
+
+    violations.sort_by(|a, b| {
+        a.file_path
+            .cmp(&b.file_path)
+            .then_with(|| a.line.cmp(&b.line))
+    });
+    violations
+}
+
+// ---------------------------------------------------------------------------
+// Suppression helpers
+// ---------------------------------------------------------------------------
+
+/// Pre-parse suppression comment maps from source text.
+fn pre_parse_suppressions(sources: &[String]) -> Vec<SuppressionMap> {
+    sources.iter().map(|s| SuppressionMap::parse(s)).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Source module discovery helpers
+// ---------------------------------------------------------------------------
+
+/// Collect all resolved source file paths referenced by a module's imports and
+/// vi.mock() calls, skipping external packages.
+fn collect_source_paths(module: &ParsedModule) -> Vec<PathBuf> {
+    let mut sources: Vec<&str> = Vec::new();
+    for imp in &module.imports_parsed {
+        sources.push(&imp.source);
+    }
+    for mock in &module.vi_mocks {
+        if !sources.contains(&mock.source.as_str()) {
+            sources.push(&mock.source);
+        }
+    }
+
+    sources
+        .iter()
+        .filter_map(|source| resolve_source_path(module, source))
+        .collect()
+}
+
+/// Resolve a single import source string to an absolute file path.
+///
+/// Attempts extension-less resolution, then index file resolution, within the
+/// module's parent directory. Returns `None` for external packages or
+/// unresolvable paths.
+fn resolve_source_path(module: &ParsedModule, source: &str) -> Option<PathBuf> {
+    // Skip external packages
+    if !source.starts_with('.') && !source.starts_with('/') {
+        return None;
+    }
+    let parent = module.file_path.parent()?;
+    let base = parent.join(source);
+    let exts = [".ts", ".tsx", ".js", ".jsx"];
+
+    for ext in &exts {
+        let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    for name in &["index.ts", "index.tsx", "index.js", "index.jsx"] {
+        let candidate = base.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 fn is_test_file(name: &str) -> bool {
     let name = name.to_ascii_lowercase();

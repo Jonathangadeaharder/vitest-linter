@@ -221,52 +221,10 @@ impl ModuleGraph {
     #[must_use]
     pub fn new(test_modules: &[ParsedModule], source_modules: &[ParsedModule]) -> Self {
         let mut modules = HashMap::new();
-        let mut edges = HashMap::new();
-
-        // Add all modules to the graph
         for module in test_modules.iter().chain(source_modules.iter()) {
             modules.insert(module.file_path.clone(), module.clone());
-            edges.insert(module.file_path.clone(), Vec::new());
         }
-
-        // Build edges from imports
-        for module in test_modules.iter().chain(source_modules.iter()) {
-            for imp in &module.imports_parsed {
-                // Try to resolve relative imports
-                if imp.source.starts_with('.') || imp.source.starts_with('/') {
-                    if let Some(parent) = module.file_path.parent() {
-                        let base = parent.join(&imp.source);
-                        let exts = [".ts", ".tsx", ".js", ".jsx"];
-                        let mut resolved = false;
-                        for ext in &exts {
-                            let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
-                            if modules.contains_key(&candidate) {
-                                edges
-                                    .entry(module.file_path.clone())
-                                    .or_default()
-                                    .push(candidate);
-                                resolved = true;
-                                break;
-                            }
-                        }
-                        // Check for index files if direct file not found
-                        if !resolved {
-                            for ext in &exts {
-                                let candidate = base.join(format!("index{}", ext));
-                                if modules.contains_key(&candidate) {
-                                    edges
-                                        .entry(module.file_path.clone())
-                                        .or_default()
-                                        .push(candidate);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        let edges = build_edges(&modules, test_modules, source_modules);
         Self { modules, edges }
     }
 
@@ -288,6 +246,61 @@ impl ModuleGraph {
             })
             .unwrap_or_default()
     }
+}
+
+/// Resolve a relative import to an absolute module path, if the module exists.
+fn resolve_import_edge(
+    module: &ParsedModule,
+    imp: &ImportEntry,
+    modules: &HashMap<PathBuf, ParsedModule>,
+) -> Option<PathBuf> {
+    // Skip non-relative imports (bare specifiers like "vitest", "lodash")
+    if !imp.source.starts_with('.') && !imp.source.starts_with('/') {
+        return None;
+    }
+
+    let parent = module.file_path.parent()?;
+    let base = parent.join(&imp.source);
+    let exts = [".ts", ".tsx", ".js", ".jsx"];
+
+    // Try direct file match (e.g., "./foo" → "./foo.ts")
+    for ext in &exts {
+        let candidate = base.with_extension(ext.strip_prefix('.').unwrap());
+        if modules.contains_key(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    // Try index file match (e.g., "./dir" → "./dir/index.ts")
+    for ext in &exts {
+        let candidate = base.join(format!("index{}", ext));
+        if modules.contains_key(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+/// Build edges from import statements for all modules.
+fn build_edges(
+    modules: &HashMap<PathBuf, ParsedModule>,
+    test_modules: &[ParsedModule],
+    source_modules: &[ParsedModule],
+) -> HashMap<PathBuf, Vec<PathBuf>> {
+    let mut edges: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+
+    for module in test_modules.iter().chain(source_modules.iter()) {
+        let file_path = &module.file_path;
+        edges.entry(file_path.clone()).or_default();
+        for imp in &module.imports_parsed {
+            if let Some(resolved) = resolve_import_edge(module, imp, modules) {
+                edges.entry(file_path.clone()).or_default().push(resolved);
+            }
+        }
+    }
+
+    edges
 }
 
 #[derive(Debug, Clone)]

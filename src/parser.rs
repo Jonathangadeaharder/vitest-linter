@@ -100,29 +100,7 @@ impl TsParser {
             };
             match child.kind() {
                 "import_statement" => {
-                    let text = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                    ctx.imports.push(text);
-                    if let Some(entry) = Self::parse_import(child, source) {
-                        if entry.source == "node:test" {
-                            ctx.imports_node_test = true;
-                        }
-                        if entry.source == "@playwright/test" {
-                            ctx.runtime = TestRuntime::Playwright;
-                            ctx.playwright_module = Some(PlaywrightModule::default());
-                        } else if entry.source.starts_with("vitest")
-                            && ctx.runtime == TestRuntime::Unknown
-                        {
-                            ctx.runtime = TestRuntime::Vitest;
-                        }
-                        if entry.source == "axe-playwright"
-                            || entry.source == "@axe-core/playwright"
-                        {
-                            if let Some(ref mut pw) = ctx.playwright_module {
-                                pw.uses_axe = true;
-                            }
-                        }
-                        ctx.imports_parsed.push(entry);
-                    }
+                    Self::collect_import_statement(child, source, ctx);
                 }
                 "call_expression" => {
                     Self::handle_call(child, source, path, describe_depth, scope, ctx);
@@ -140,6 +118,29 @@ impl TsParser {
                 }
             }
         }
+    }
+
+    fn collect_import_statement(child: Node, source: &str, ctx: &mut Context) {
+        let text = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+        ctx.imports.push(text);
+        let Some(entry) = Self::parse_import(child, source) else {
+            return;
+        };
+        if entry.source == "node:test" {
+            ctx.imports_node_test = true;
+        }
+        if entry.source == "@playwright/test" {
+            ctx.runtime = TestRuntime::Playwright;
+            ctx.playwright_module = Some(PlaywrightModule::default());
+        } else if entry.source.starts_with("vitest") && ctx.runtime == TestRuntime::Unknown {
+            ctx.runtime = TestRuntime::Vitest;
+        }
+        if entry.source == "axe-playwright" || entry.source == "@axe-core/playwright" {
+            if let Some(ref mut pw) = ctx.playwright_module {
+                pw.uses_axe = true;
+            }
+        }
+        ctx.imports_parsed.push(entry);
     }
 
     fn collect_global_stub_assignment(node: &Node, source: &str, ctx: &mut Context) {
@@ -171,32 +172,35 @@ impl TsParser {
             let Some(child) = node.named_child(i) else {
                 continue;
             };
-            if child.kind() == "variable_declarator" {
-                let text = child.utf8_text(source.as_bytes()).unwrap_or("");
-                if text.contains("vi.fn()") || text.contains("vi.fn(") {
-                    if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node
-                            .utf8_text(source.as_bytes())
-                            .unwrap_or("")
-                            .to_string();
-                        if name.starts_with("global.") || name.starts_with("globalThis.") {
-                            let target_name = name
-                                .strip_prefix("global.")
-                                .or_else(|| name.strip_prefix("globalThis."))
-                                .unwrap_or(&name)
-                                .to_string();
-                            ctx.global_stubs.push(GlobalStub {
-                                target: target_name,
-                                line: node.start_position().row + 1,
-                            });
-                        }
-                    }
-                }
+            if child.kind() != "variable_declarator" {
+                continue;
             }
+            let text = child.utf8_text(source.as_bytes()).unwrap_or("");
+            if !text.contains("vi.fn()") && !text.contains("vi.fn(") {
+                continue;
+            }
+            let Some(name_node) = child.child_by_field_name("name") else {
+                continue;
+            };
+            let name = name_node
+                .utf8_text(source.as_bytes())
+                .unwrap_or("")
+                .to_string();
+            if !name.starts_with("global.") && !name.starts_with("globalThis.") {
+                continue;
+            }
+            let target_name = name
+                .strip_prefix("global.")
+                .or_else(|| name.strip_prefix("globalThis."))
+                .unwrap_or(&name)
+                .to_string();
+            ctx.global_stubs.push(GlobalStub {
+                target: target_name,
+                line: node.start_position().row + 1,
+            });
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn handle_call(
         node: Node,
         source: &str,
@@ -216,117 +220,178 @@ impl TsParser {
             .unwrap_or("")
             .to_string();
 
-        // Track expect() calls at module level (outside test blocks)
+        Self::track_expect_outside_test(&func_name, scope, node, ctx);
+        Self::track_snapshot_calls(&full_callee, node, source, ctx);
+        Self::track_vi_mock(&full_callee, node, source, scope, ctx);
+        Self::track_vi_stub_global(&full_callee, node, source, ctx);
+        Self::track_pw_runtime(ctx, &full_callee, node, source);
+
+        Self::dispatch_call(
+            &func_name,
+            &full_callee,
+            is_skip,
+            is_only,
+            node,
+            source,
+            path,
+            describe_depth,
+            scope,
+            ctx,
+        );
+    }
+
+    fn track_expect_outside_test(func_name: &str, scope: MockScope, node: Node, ctx: &mut Context) {
         if scope == MockScope::Module && func_name == "expect" {
             ctx.expects_outside_tests.push(ExpectOutsideTest {
                 line: node.start_position().row + 1,
             });
         }
+    }
 
-        // Detect snapshot matcher calls with inline content
-        if full_callee.ends_with(".toMatchInlineSnapshot")
-            || full_callee.ends_with(".toMatchSnapshot")
+    fn track_snapshot_calls(full_callee: &str, node: Node, source: &str, ctx: &mut Context) {
+        if !full_callee.ends_with(".toMatchInlineSnapshot")
+            && !full_callee.ends_with(".toMatchSnapshot")
         {
-            if let Some(args) = node.child_by_field_name("arguments") {
-                if args.named_child_count() > 0 {
-                    if let Some(first) = args.named_child(0) {
-                        if first.kind() == "string" || first.kind() == "template_string" {
-                            let content = first.utf8_text(source.as_bytes()).unwrap_or("");
-                            ctx.snapshot_sizes.push(SnapshotSize {
-                                line: first.start_position().row + 1,
-                                size: content.lines().count(),
-                            });
-                        }
-                    }
-                }
-            }
+            return;
         }
-
-        // vi.mock(...) — module-scope hoisted mock when at module scope, but we
-        // record it with the actual lexical scope so rules can decide.
-        if full_callee == "vi.mock" {
-            if let Some(entry) = Self::extract_vi_mock(node, source, scope) {
-                ctx.vi_mocks.push(entry);
-            }
+        let Some(args) = node.child_by_field_name("arguments") else {
+            return;
+        };
+        let Some(first) = args.named_child(0) else {
+            return;
+        };
+        if first.kind() == "string" || first.kind() == "template_string" {
+            let content = first.utf8_text(source.as_bytes()).unwrap_or("");
+            ctx.snapshot_sizes.push(SnapshotSize {
+                line: first.start_position().row + 1,
+                size: content.lines().count(),
+            });
         }
+    }
 
-        // vi.stubGlobal(name, ...) — records global stub without cleanup
-        if full_callee == "vi.stubGlobal" {
-            if let Some(args) = node.child_by_field_name("arguments") {
-                if let Some(first) = args.named_child(0) {
-                    if let Some(target) = Self::string_value(first, source) {
-                        ctx.global_stubs.push(GlobalStub {
-                            target,
-                            line: node.start_position().row + 1,
-                        });
-                    }
-                }
-            }
+    fn track_vi_mock(full_callee: &str, node: Node, source: &str, scope: MockScope, ctx: &mut Context) {
+        if full_callee != "vi.mock" {
+            return;
         }
+        if let Some(entry) = Self::extract_vi_mock(node, source, scope) {
+            ctx.vi_mocks.push(entry);
+        }
+    }
 
-        // Playwright-specific call tracking
+    fn track_vi_stub_global(full_callee: &str, node: Node, source: &str, ctx: &mut Context) {
+        if full_callee != "vi.stubGlobal" {
+            return;
+        }
+        let Some(args) = node.child_by_field_name("arguments") else {
+            return;
+        };
+        let Some(first) = args.named_child(0) else {
+            return;
+        };
+        if let Some(target) = Self::string_value(first, source) {
+            ctx.global_stubs.push(GlobalStub {
+                target,
+                line: node.start_position().row + 1,
+            });
+        }
+    }
+
+    fn track_pw_runtime(ctx: &mut Context, full_callee: &str, node: Node, source: &str) {
         if ctx.runtime == TestRuntime::Playwright {
-            Self::track_playwright_call(&full_callee, node, source, ctx);
+            Self::track_playwright_call(full_callee, node, source, ctx);
         }
+    }
 
-        match func_name.as_str() {
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_call(
+        func_name: &str,
+        full_callee: &str,
+        is_skip: bool,
+        is_only: bool,
+        node: Node,
+        source: &str,
+        path: &Path,
+        describe_depth: usize,
+        scope: MockScope,
+        ctx: &mut Context,
+    ) {
+        match func_name {
             "test" | "it" | "fit" | "xit" => {
-                // Playwright: test.describe / test.describe.only are describe blocks
-                if full_callee.starts_with("test.describe") {
-                    Self::add_describe_block(
-                        node,
-                        source,
-                        path,
-                        describe_depth,
-                        is_only,
-                        scope,
-                        ctx,
-                    );
-                } else {
-                    let uses_fit_or_xit =
-                        full_callee.starts_with("fit") || full_callee.starts_with("xit");
-                    if let Some(tb) = Self::extract_test(
-                        node,
-                        source,
-                        path,
-                        describe_depth,
-                        is_skip,
-                        is_only,
-                        uses_fit_or_xit,
-                    ) {
-                        ctx.test_blocks.push(tb);
-                    }
-                    if let Some(body) = Self::callback_body(node) {
-                        Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
-                    }
-                }
+                Self::dispatch_test_call(
+                    full_callee, is_skip, is_only, node, source, path, describe_depth, scope, ctx,
+                );
             }
             "describe" | "fdescribe" | "xdescribe" => {
                 Self::add_describe_block(node, source, path, describe_depth, is_only, scope, ctx);
             }
             "beforeEach" | "afterEach" | "beforeAll" | "afterAll" => {
-                let kind = match func_name.as_str() {
-                    "beforeEach" => HookKind::BeforeEach,
-                    "afterEach" => HookKind::AfterEach,
-                    "beforeAll" => HookKind::BeforeAll,
-                    "afterAll" => HookKind::AfterAll,
-                    _ => unreachable!(),
-                };
-                let mut vi_calls = Vec::new();
-                if let Some(body) = Self::single_callback_body(node) {
-                    Self::collect_vi_calls(body, source, &mut vi_calls);
-                    Self::collect(body, source, path, describe_depth, MockScope::Hook, ctx);
-                }
-                ctx.hook_calls.push(HookCall {
-                    kind,
-                    line: node.start_position().row + 1,
-                    vi_calls,
-                });
+                Self::dispatch_hook_call(func_name, node, source, path, describe_depth, ctx);
             }
             _ => {
                 Self::collect(node, source, path, describe_depth, scope, ctx);
             }
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_test_call(
+        full_callee: &str,
+        is_skip: bool,
+        is_only: bool,
+        node: Node,
+        source: &str,
+        path: &Path,
+        describe_depth: usize,
+        scope: MockScope,
+        ctx: &mut Context,
+    ) {
+        if full_callee.starts_with("test.describe") {
+            Self::add_describe_block(node, source, path, describe_depth, is_only, scope, ctx);
+        } else {
+            let uses_fit_or_xit =
+                full_callee.starts_with("fit") || full_callee.starts_with("xit");
+            if let Some(tb) = Self::extract_test(
+                node,
+                source,
+                path,
+                describe_depth,
+                is_skip,
+                is_only,
+                uses_fit_or_xit,
+            ) {
+                ctx.test_blocks.push(tb);
+            }
+            if let Some(body) = Self::callback_body(node) {
+                Self::collect(body, source, path, describe_depth, MockScope::Test, ctx);
+            }
+        }
+    }
+
+    fn dispatch_hook_call(
+        func_name: &str,
+        node: Node,
+        source: &str,
+        path: &Path,
+        describe_depth: usize,
+        ctx: &mut Context,
+    ) {
+        let kind = match func_name {
+            "beforeEach" => HookKind::BeforeEach,
+            "afterEach" => HookKind::AfterEach,
+            "beforeAll" => HookKind::BeforeAll,
+            "afterAll" => HookKind::AfterAll,
+            _ => unreachable!(),
+        };
+        let mut vi_calls = Vec::new();
+        if let Some(body) = Self::single_callback_body(node) {
+            Self::collect_vi_calls(body, source, &mut vi_calls);
+            Self::collect(body, source, path, describe_depth, MockScope::Hook, ctx);
+        }
+        ctx.hook_calls.push(HookCall {
+            kind,
+            line: node.start_position().row + 1,
+            vi_calls,
+        });
     }
 
     fn collect_vi_calls(node: Node, source: &str, out: &mut Vec<String>) {
@@ -380,78 +445,108 @@ impl TsParser {
 
         // Check for `export { a, b }` (re-exports or named exports)
         for i in 0..node.named_child_count() {
-            if let Some(child) = node.named_child(i) {
-                match child.kind() {
-                    "export_clause" => {
-                        for j in 0..child.named_child_count() {
-                            if let Some(spec) = child.named_child(j) {
-                                if spec.kind() == "export_specifier" {
-                                    let name = spec
-                                        .child_by_field_name("name")
-                                        .and_then(|n| n.utf8_text(source.as_bytes()).ok())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    if !name.is_empty() {
-                                        exports.push(ExportEntry {
-                                            name,
-                                            kind: ExportKind::Named,
-                                            line,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "lexical_declaration" | "variable_declaration" => {
-                        // `export const x = ...` or `export let x = ...`
-                        for j in 0..child.named_child_count() {
-                            if let Some(decl) = child.named_child(j) {
-                                if decl.kind() == "variable_declarator" {
-                                    if let Some(name_node) = decl.child_by_field_name("name") {
-                                        let name = name_node
-                                            .utf8_text(source.as_bytes())
-                                            .unwrap_or("")
-                                            .to_string();
-                                        if !name.is_empty() {
-                                            exports.push(ExportEntry {
-                                                name,
-                                                kind: ExportKind::Named,
-                                                line,
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "function_declaration" | "class_declaration" | "abstract_class_declaration" => {
-                        let name = child
-                            .child_by_field_name("name")
-                            .and_then(|n| n.utf8_text(source.as_bytes()).ok())
-                            .unwrap_or("")
-                            .to_string();
-                        if !name.is_empty() {
-                            exports.push(ExportEntry {
-                                name,
-                                kind: ExportKind::Named,
-                                line,
-                            });
-                        }
-                    }
-                    "identifier" => {
-                        // `export default identifier`
-                        let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                        if !name.is_empty() {
-                            exports.push(ExportEntry {
-                                name,
-                                kind: ExportKind::Default,
-                                line,
-                            });
-                        }
-                    }
-                    _ => {}
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            match child.kind() {
+                "export_clause" => {
+                    Self::collect_export_clause(child, source, exports, line);
                 }
+                "lexical_declaration" | "variable_declaration" => {
+                    Self::collect_export_variable(child, source, exports, line);
+                }
+                "function_declaration" | "class_declaration" | "abstract_class_declaration" => {
+                    Self::collect_export_declaration(child, source, exports, line);
+                }
+                "identifier" => {
+                    Self::collect_export_identifier(child, source, exports, line);
+                }
+                _ => {}
             }
+        }
+    }
+
+    fn collect_export_clause(child: Node, source: &str, exports: &mut Vec<ExportEntry>, line: usize) {
+        for j in 0..child.named_child_count() {
+            let Some(spec) = child.named_child(j) else {
+                continue;
+            };
+            if spec.kind() != "export_specifier" {
+                continue;
+            }
+            let name = spec
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                .unwrap_or("")
+                .to_string();
+            if !name.is_empty() {
+                exports.push(ExportEntry {
+                    name,
+                    kind: ExportKind::Named,
+                    line,
+                });
+            }
+        }
+    }
+
+    fn collect_export_variable(
+        child: Node,
+        source: &str,
+        exports: &mut Vec<ExportEntry>,
+        line: usize,
+    ) {
+        for j in 0..child.named_child_count() {
+            let Some(decl) = child.named_child(j) else {
+                continue;
+            };
+            if decl.kind() != "variable_declarator" {
+                continue;
+            }
+            let Some(name_node) = decl.child_by_field_name("name") else {
+                continue;
+            };
+            let name = name_node
+                .utf8_text(source.as_bytes())
+                .unwrap_or("")
+                .to_string();
+            if !name.is_empty() {
+                exports.push(ExportEntry {
+                    name,
+                    kind: ExportKind::Named,
+                    line,
+                });
+            }
+        }
+    }
+
+    fn collect_export_declaration(
+        child: Node,
+        source: &str,
+        exports: &mut Vec<ExportEntry>,
+        line: usize,
+    ) {
+        let name = child
+            .child_by_field_name("name")
+            .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+            .unwrap_or("")
+            .to_string();
+        if !name.is_empty() {
+            exports.push(ExportEntry {
+                name,
+                kind: ExportKind::Named,
+                line,
+            });
+        }
+    }
+
+    fn collect_export_identifier(child: Node, source: &str, exports: &mut Vec<ExportEntry>, line: usize) {
+        let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+        if !name.is_empty() {
+            exports.push(ExportEntry {
+                name,
+                kind: ExportKind::Default,
+                line,
+            });
         }
     }
 
@@ -463,6 +558,19 @@ impl TsParser {
 
         let line = node.start_position().row + 1;
 
+        Self::track_pw_tracked_calls(full_callee, node, source, line, pw_module);
+        Self::track_pw_evaluate(full_callee, node, source, line, pw_module);
+        Self::track_pw_axe(full_callee, pw_module);
+        Self::track_pw_locator_chains(full_callee, node, source, line, pw_module);
+    }
+
+    fn track_pw_tracked_calls(
+        full_callee: &str,
+        node: Node,
+        source: &str,
+        line: usize,
+        pw_module: &mut PlaywrightModule,
+    ) {
         let tracked_calls = [
             "waitForTimeout",
             "page.$",
@@ -487,24 +595,39 @@ impl TsParser {
                 break;
             }
         }
+    }
 
-        // Track evaluate innerText
+    fn track_pw_evaluate(
+        full_callee: &str,
+        node: Node,
+        source: &str,
+        line: usize,
+        pw_module: &mut PlaywrightModule,
+    ) {
         if full_callee.contains("evaluate") {
             let text = node.utf8_text(source.as_bytes()).unwrap_or("");
             if text.contains("innerText") {
                 pw_module.evaluate_inner_text.push(line);
             }
         }
+    }
 
-        // Track axe usage
+    fn track_pw_axe(full_callee: &str, pw_module: &mut PlaywrightModule) {
         if full_callee.contains("injectAxe")
             || full_callee.contains("checkA11y")
             || full_callee.contains("AxeBuilder")
         {
             pw_module.uses_axe = true;
         }
+    }
 
-        // Track locator chains
+    fn track_pw_locator_chains(
+        full_callee: &str,
+        node: Node,
+        source: &str,
+        line: usize,
+        pw_module: &mut PlaywrightModule,
+    ) {
         let locator_roots = [
             "getByRole",
             "getByText",
@@ -593,22 +716,7 @@ impl TsParser {
     fn collect_returned_keys(node: Node, source: &str, keys: &mut Vec<String>) {
         match node.kind() {
             "object" | "object_pattern" => {
-                // Collect keys from this object
-                for i in 0..node.named_child_count() {
-                    if let Some(child) = node.named_child(i) {
-                        if child.kind() == "pair" || child.kind() == "property" {
-                            if let Some(key) = child.child_by_field_name("key") {
-                                if let Ok(text) = key.utf8_text(source.as_bytes()) {
-                                    keys.push(text.to_string());
-                                }
-                            }
-                        } else if child.kind() == "shorthand_property_identifier" {
-                            if let Ok(text) = child.utf8_text(source.as_bytes()) {
-                                keys.push(text.to_string());
-                            }
-                        }
-                    }
-                }
+                Self::collect_object_keys(node, source, keys);
             }
             "statement_block" | "return_statement" | "parenthesized_expression" => {
                 for i in 0..node.named_child_count() {
@@ -618,6 +726,25 @@ impl TsParser {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn collect_object_keys(node: Node, source: &str, keys: &mut Vec<String>) {
+        for i in 0..node.named_child_count() {
+            let Some(child) = node.named_child(i) else {
+                continue;
+            };
+            if child.kind() == "pair" || child.kind() == "property" {
+                if let Some(key) = child.child_by_field_name("key") {
+                    if let Ok(text) = key.utf8_text(source.as_bytes()) {
+                        keys.push(text.to_string());
+                    }
+                }
+            } else if child.kind() == "shorthand_property_identifier" {
+                if let Ok(text) = child.utf8_text(source.as_bytes()) {
+                    keys.push(text.to_string());
+                }
+            }
         }
     }
 
@@ -662,55 +789,68 @@ impl TsParser {
             };
             match child.kind() {
                 "identifier" => {
-                    let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
-                    if !name.is_empty() {
-                        entry.default = Some(name);
-                    }
+                    Self::walk_import_identifier(child, source, entry);
                 }
                 "namespace_import" => {
-                    for j in 0..child.named_child_count() {
-                        if let Some(inner) = child.named_child(j) {
-                            if inner.kind() == "identifier" {
-                                entry.namespace = Some(
-                                    inner.utf8_text(source.as_bytes()).unwrap_or("").to_string(),
-                                );
-                            }
-                        }
-                    }
+                    Self::walk_import_namespace(child, source, entry);
                 }
                 "named_imports" => {
-                    for j in 0..child.named_child_count() {
-                        if let Some(spec) = child.named_child(j) {
-                            if spec.kind() == "import_specifier" {
-                                // import_specifier has `name` and optional `alias`.
-                                let name = spec
-                                    .child_by_field_name("name")
-                                    .and_then(|n| n.utf8_text(source.as_bytes()).ok())
-                                    .unwrap_or("");
-                                if name.is_empty() {
-                                    // Fallback: first identifier child.
-                                    for k in 0..spec.named_child_count() {
-                                        if let Some(c) = spec.named_child(k) {
-                                            if c.kind() == "identifier" {
-                                                let n = c
-                                                    .utf8_text(source.as_bytes())
-                                                    .unwrap_or("")
-                                                    .to_string();
-                                                if !n.is_empty() {
-                                                    entry.named.push(n);
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    entry.named.push(name.to_string());
-                                }
-                            }
-                        }
-                    }
+                    Self::walk_import_named(child, source, entry);
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn walk_import_identifier(child: Node, source: &str, entry: &mut ImportEntry) {
+        let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+        if !name.is_empty() {
+            entry.default = Some(name);
+        }
+    }
+
+    fn walk_import_namespace(child: Node, source: &str, entry: &mut ImportEntry) {
+        for j in 0..child.named_child_count() {
+            if let Some(inner) = child.named_child(j) {
+                if inner.kind() == "identifier" {
+                    entry.namespace = Some(
+                        inner.utf8_text(source.as_bytes()).unwrap_or("").to_string(),
+                    );
+                }
+            }
+        }
+    }
+
+    fn walk_import_named(child: Node, source: &str, entry: &mut ImportEntry) {
+        for j in 0..child.named_child_count() {
+            let Some(spec) = child.named_child(j) else {
+                continue;
+            };
+            if spec.kind() != "import_specifier" {
+                continue;
+            }
+            let name = spec
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                .unwrap_or("");
+            if name.is_empty() {
+                Self::walk_import_named_fallback(spec, source, entry);
+            } else {
+                entry.named.push(name.to_string());
+            }
+        }
+    }
+
+    fn walk_import_named_fallback(spec: Node, source: &str, entry: &mut ImportEntry) {
+        for k in 0..spec.named_child_count() {
+            if let Some(c) = spec.named_child(k) {
+                if c.kind() == "identifier" {
+                    let n = c.utf8_text(source.as_bytes()).unwrap_or("").to_string();
+                    if !n.is_empty() {
+                        entry.named.push(n);
+                        break;
+                    }
+                }
             }
         }
     }
@@ -877,7 +1017,14 @@ impl TsParser {
         if cb.kind() != "arrow_function" && cb.kind() != "function_expression" {
             return false;
         }
-        let params = cb.child_by_field_name("parameters").or_else(|| {
+        let Some(params) = Self::find_params_node(cb) else {
+            return false;
+        };
+        Self::check_done_in_params(params, source)
+    }
+
+    fn find_params_node(cb: Node) -> Option<Node> {
+        cb.child_by_field_name("parameters").or_else(|| {
             for i in 0..cb.named_child_count() {
                 let child = cb.named_child(i)?;
                 if child.kind() == "formal_parameters" {
@@ -885,35 +1032,38 @@ impl TsParser {
                 }
             }
             None
-        });
-        if let Some(params) = params {
-            for i in 0..params.named_child_count() {
-                if let Some(param) = params.named_child(i) {
-                    match param.kind() {
-                        "identifier"
-                            if param.utf8_text(source.as_bytes()).unwrap_or("") == "done" =>
-                        {
-                            return true;
-                        }
-                        "required_parameter" => {
-                            // required_parameter wraps an identifier or pattern
-                            for j in 0..param.named_child_count() {
-                                if let Some(inner) = param.named_child(j) {
-                                    if inner.kind() == "identifier"
-                                        && inner.utf8_text(source.as_bytes()).unwrap_or("")
-                                            == "done"
-                                    {
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
+        })
+    }
+
+    fn check_done_in_params(params: Node, source: &str) -> bool {
+        for i in 0..params.named_child_count() {
+            let Some(param) = params.named_child(i) else {
+                continue;
+            };
+            if Self::is_done_identifier(param, source) {
+                return true;
             }
         }
         false
+    }
+
+    fn is_done_identifier(param: Node, source: &str) -> bool {
+        match param.kind() {
+            "identifier" => param.utf8_text(source.as_bytes()).unwrap_or("") == "done",
+            "required_parameter" => {
+                for j in 0..param.named_child_count() {
+                    if let Some(inner) = param.named_child(j) {
+                        if inner.kind() == "identifier"
+                            && inner.utf8_text(source.as_bytes()).unwrap_or("") == "done"
+                        {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
     }
 
     fn string_value(node: Node, source: &str) -> Option<String> {
@@ -968,130 +1118,148 @@ impl TsParser {
     fn walk_body(node: Node, source: &str, st: &mut Analysis) {
         match node.kind() {
             "call_expression" => {
-                let func = node.child_by_field_name("function").unwrap();
-                let text = func.utf8_text(source.as_bytes()).unwrap_or("");
-                // Only count expect() calls where the function is a simple identifier
-                // (not a chained member expression like expect(x).toBe).
-                let is_expect_call = func.kind() == "identifier" && text == "expect";
-                if is_expect_call {
-                    st.assertion_count += 1;
-                    // Mark expect inside conditional
-                    if st.in_conditional {
-                        st.has_conditional_expect = true;
-                    }
-                    // Check if expect() is called without a chained assertion method.
-                    // If the expect call is inside a member_expression that is itself
-                    // inside a call_expression, it has a chained assertion (e.g. expect(x).toBe(y)).
-                    let has_chained_assertion = Self::has_parent_member_call(node);
-                    if !has_chained_assertion {
-                        st.has_expect_call_without_assertion = true;
-                    }
-                    // Check if this is a weak assertion (e.g. toBeDefined, toBeTruthy).
-                    if let Some((matcher, negated)) = Self::expect_matcher_info(node, source) {
-                        let is_weak_matcher = Self::WEAK_MATCHERS.contains(&matcher);
-                        let is_negated_throw = negated && matcher == "toThrow";
-                        if is_weak_matcher || is_negated_throw {
-                            st.weak_assertion_count += 1;
-                        }
-                    }
-                    // Check if expect() wraps an async function.
-                    if let Some(args) = node.child_by_field_name("arguments") {
-                        if let Some(first_arg) = args.named_child(0) {
-                            if first_arg.kind() == "arrow_function"
-                                || first_arg.kind() == "function_expression"
-                            {
-                                let func_text =
-                                    first_arg.utf8_text(source.as_bytes()).unwrap_or("");
-                                if func_text.trim_start().starts_with("async") {
-                                    st.has_async_expect_wrapper = true;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // For non-expect calls, walk the function field to find nested expect calls
-                    // (e.g., expect(x).toBe(y) or expect(async () => ...).not.toThrow()).
-                    Self::walk_body(func, source, st);
-                }
-                // Check for unawaited async assertions (.resolves/.rejects).
-                // This applies to any call that contains these in its text.
-                if (text.contains(".resolves") || text.contains(".rejects"))
-                    && !Self::is_awaited(node)
-                {
-                    st.unawaited_async_assertions += 1;
-                }
-                if text == "setTimeout" {
-                    st.uses_settimeout = true;
-                    if st.in_promise_constructor {
-                        st.uses_promise_settimeout = true;
-                    }
-                }
-                if text.starts_with("Date.") {
-                    st.uses_datemock = true;
-                }
-                if text == "vi.useFakeTimers" {
-                    st.uses_fake_timers = true;
-                }
-                if text == "vi.useRealTimers" {
-                    st.has_real_timers_call = true;
-                }
-                if text == "Math.random" || text == "crypto.randomUUID" {
-                    st.uses_random = true;
-                }
-                let args = node.child_by_field_name("arguments").unwrap();
-                for i in 0..args.named_child_count() {
-                    let child = args.named_child(i).unwrap();
-                    Self::walk_body(child, source, st);
-                }
+                Self::walk_call_expression(node, source, st);
                 return;
             }
             "new_expression" => {
-                let ctor = node.child_by_field_name("constructor").unwrap();
-                let ctor_text = ctor.utf8_text(source.as_bytes()).unwrap_or("");
-                if ctor_text == "Date" {
-                    st.uses_datemock = true;
-                }
-                let is_promise = ctor_text == "Promise";
-                let prev_in_promise_constructor = st.in_promise_constructor;
-                if is_promise {
-                    st.in_promise_constructor = true;
-                }
-                if let Some(args) = node.child_by_field_name("arguments") {
-                    for i in 0..args.named_child_count() {
-                        let child = args.named_child(i).unwrap();
-                        Self::walk_body(child, source, st);
-                    }
-                }
-                st.in_promise_constructor = prev_in_promise_constructor;
+                Self::walk_new_expression(node, source, st);
             }
             "if_statement" | "switch_statement" => {
-                st.has_conditional = true;
-                let prev = st.in_conditional;
-                st.in_conditional = true;
-                for i in 0..node.named_child_count() {
-                    let child = node.named_child(i).unwrap();
-                    Self::walk_body(child, source, st);
-                }
-                st.in_conditional = prev;
+                Self::walk_conditional(node, source, st);
                 return;
             }
             "try_statement" => {
                 st.has_try_catch = true;
             }
             "return_statement" => {
-                st.has_return = true;
-                // Check if return contains an expect call.
-                for i in 0..node.named_child_count() {
-                    let child = node.named_child(i).unwrap();
-                    if Self::contains_expect_call(child, source) {
-                        st.has_return_of_expect = true;
-                        break;
-                    }
-                }
+                Self::walk_return_statement(node, source, st);
             }
             _ => {}
         }
 
+        Self::walk_body_children(node, source, st);
+    }
+
+    fn walk_call_expression(node: Node, source: &str, st: &mut Analysis) {
+        let func = node.child_by_field_name("function").unwrap();
+        let text = func.utf8_text(source.as_bytes()).unwrap_or("");
+        let is_expect_call = func.kind() == "identifier" && text == "expect";
+
+        if is_expect_call {
+            Self::handle_expect_call(node, source, st);
+        } else {
+            Self::walk_body(func, source, st);
+        }
+
+        Self::walk_call_flags(node, text, st);
+
+        let args = node.child_by_field_name("arguments").unwrap();
+        for i in 0..args.named_child_count() {
+            let child = args.named_child(i).unwrap();
+            Self::walk_body(child, source, st);
+        }
+    }
+
+    fn handle_expect_call(node: Node, source: &str, st: &mut Analysis) {
+        st.assertion_count += 1;
+        if st.in_conditional {
+            st.has_conditional_expect = true;
+        }
+        let has_chained_assertion = Self::has_parent_member_call(node);
+        if !has_chained_assertion {
+            st.has_expect_call_without_assertion = true;
+        }
+        if let Some((matcher, negated)) = Self::expect_matcher_info(node, source) {
+            let is_weak_matcher = Self::WEAK_MATCHERS.contains(&matcher);
+            let is_negated_throw = negated && matcher == "toThrow";
+            if is_weak_matcher || is_negated_throw {
+                st.weak_assertion_count += 1;
+            }
+        }
+        Self::check_async_expect_wrapper(node, source, st);
+    }
+
+    fn check_async_expect_wrapper(node: Node, source: &str, st: &mut Analysis) {
+        let Some(args) = node.child_by_field_name("arguments") else {
+            return;
+        };
+        let Some(first_arg) = args.named_child(0) else {
+            return;
+        };
+        if first_arg.kind() == "arrow_function" || first_arg.kind() == "function_expression" {
+            let func_text = first_arg.utf8_text(source.as_bytes()).unwrap_or("");
+            if func_text.trim_start().starts_with("async") {
+                st.has_async_expect_wrapper = true;
+            }
+        }
+    }
+
+    fn walk_call_flags(node: Node, text: &str, st: &mut Analysis) {
+        if (text.contains(".resolves") || text.contains(".rejects")) && !Self::is_awaited(node) {
+            st.unawaited_async_assertions += 1;
+        }
+        if text == "setTimeout" {
+            st.uses_settimeout = true;
+            if st.in_promise_constructor {
+                st.uses_promise_settimeout = true;
+            }
+        }
+        if text.starts_with("Date.") {
+            st.uses_datemock = true;
+        }
+        if text == "vi.useFakeTimers" {
+            st.uses_fake_timers = true;
+        }
+        if text == "vi.useRealTimers" {
+            st.has_real_timers_call = true;
+        }
+        if text == "Math.random" || text == "crypto.randomUUID" {
+            st.uses_random = true;
+        }
+    }
+
+    fn walk_new_expression(node: Node, source: &str, st: &mut Analysis) {
+        let ctor = node.child_by_field_name("constructor").unwrap();
+        let ctor_text = ctor.utf8_text(source.as_bytes()).unwrap_or("");
+        if ctor_text == "Date" {
+            st.uses_datemock = true;
+        }
+        let prev_in_promise_constructor = st.in_promise_constructor;
+        if ctor_text == "Promise" {
+            st.in_promise_constructor = true;
+        }
+        if let Some(args) = node.child_by_field_name("arguments") {
+            for i in 0..args.named_child_count() {
+                let child = args.named_child(i).unwrap();
+                Self::walk_body(child, source, st);
+            }
+        }
+        st.in_promise_constructor = prev_in_promise_constructor;
+    }
+
+    fn walk_conditional(node: Node, source: &str, st: &mut Analysis) {
+        st.has_conditional = true;
+        let prev = st.in_conditional;
+        st.in_conditional = true;
+        for i in 0..node.named_child_count() {
+            let child = node.named_child(i).unwrap();
+            Self::walk_body(child, source, st);
+        }
+        st.in_conditional = prev;
+    }
+
+    fn walk_return_statement(node: Node, source: &str, st: &mut Analysis) {
+        st.has_return = true;
+        for i in 0..node.named_child_count() {
+            let child = node.named_child(i).unwrap();
+            if Self::contains_expect_call(child, source) {
+                st.has_return_of_expect = true;
+                break;
+            }
+        }
+    }
+
+    fn walk_body_children(node: Node, source: &str, st: &mut Analysis) {
         for i in 0..node.named_child_count() {
             let child = node.named_child(i).unwrap();
             Self::walk_body(child, source, st);
@@ -1123,17 +1291,20 @@ impl TsParser {
     /// For `expect(x).not.toBe(2)`, returns `("toBe", true)`.
     /// For `expect(() => fn()).not.toThrow()`, returns `("toThrow", true)`.
     fn expect_matcher_info<'a>(expect_node: Node, source: &'a str) -> Option<(&'a str, bool)> {
-        // Walk up from expect to find the outermost call_expression in the chain.
-        // Handles patterns like: expect(x).toBe(y), expect(x).not.toThrow(), etc.
-        let mut curr = expect_node;
+        let (curr, has_not) = Self::walk_up_chain(expect_node, source)?;
+        Self::extract_matcher_from_call(curr, source, has_not)
+    }
+
+    /// Walk up from `expect_node` to find the outermost call_expression in the chain.
+    /// Handles patterns like: expect(x).toBe(y), expect(x).not.toThrow(), etc.
+    fn walk_up_chain<'a>(node: Node<'a>, source: &'a str) -> Option<(Node<'a>, bool)> {
+        let mut curr = node;
         let mut has_not = false;
         loop {
             let parent = curr.parent()?;
             if parent.kind() == "member_expression" {
-                if let Some(prop) = parent.child_by_field_name("property") {
-                    if prop.utf8_text(source.as_bytes()).unwrap_or("") == "not" {
-                        has_not = true;
-                    }
+                if Self::is_not_property(parent, source) {
+                    has_not = true;
                 }
                 let grandparent = parent.parent()?;
                 if grandparent.kind() == "call_expression"
@@ -1143,7 +1314,6 @@ impl TsParser {
                     continue;
                 }
             } else if parent.kind() == "call_expression" {
-                // e.g. curr = member_expression (.toThrow), parent = call_expression (toThrow())
                 let grandparent = parent.parent()?;
                 if grandparent.kind() == "member_expression" {
                     curr = grandparent;
@@ -1153,6 +1323,19 @@ impl TsParser {
             }
             break;
         }
+        Some((curr, has_not))
+    }
+
+    fn is_not_property(node: Node, source: &str) -> bool {
+        node.child_by_field_name("property")
+            .is_some_and(|prop| prop.utf8_text(source.as_bytes()).unwrap_or("") == "not")
+    }
+
+    fn extract_matcher_from_call<'a>(
+        curr: Node,
+        source: &'a str,
+        has_not: bool,
+    ) -> Option<(&'a str, bool)> {
         if curr.kind() == "call_expression" {
             if let Some(func) = curr.child_by_field_name("function") {
                 if func.kind() == "member_expression" {
