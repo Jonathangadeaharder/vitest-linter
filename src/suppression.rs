@@ -36,96 +36,136 @@ impl SuppressionMap {
 
         for (idx, line) in lines.iter().enumerate() {
             let line_num = idx + 1;
-            let trimmed = line.trim();
-
-            // Only process single-line comments
-            let comment_text = if let Some(text) = trimmed.strip_prefix("//") {
-                text.trim()
-            } else {
-                // Not a comment - propagate range suppressions
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-                continue;
-            };
-
-            if let Some(rest) = comment_text.strip_prefix(DISABLE_NEXT_LINE) {
-                let rules = parse_rule_ids(rest.trim());
-                let target_line = line_num + 1;
-                // Merge with any existing rules for the same target line
-                let entry = map
-                    .next_line
-                    .entry(target_line)
-                    .or_insert_with(HashSet::new);
-                if rules.is_empty() {
-                    // No specific rules = suppress all
-                    entry.insert(ALL_RULES.to_string());
-                } else {
-                    entry.extend(rules);
-                }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-            } else if let Some(rest) = comment_text.strip_prefix(ENABLE) {
-                let rules = parse_rule_ids(rest.trim());
-                if rules.is_empty() {
-                    active_all_range = None;
-                    active_ranges.clear();
-                    enable_exceptions.clear();
-                } else if active_all_range.is_some() {
-                    // Record as exceptions to the active all-range
-                    for rule_id in &rules {
-                        enable_exceptions.insert(rule_id.clone());
-                    }
-                } else {
-                    for rule_id in &rules {
-                        active_ranges.remove(rule_id);
-                    }
-                }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-            } else if let Some(rest) = comment_text.strip_prefix(DISABLE) {
-                let rules = parse_rule_ids(rest.trim());
-                if rules.is_empty() {
-                    active_all_range = Some(line_num);
-                    enable_exceptions.clear();
-                } else {
-                    for rule_id in rules {
-                        active_ranges.entry(rule_id).or_insert(line_num);
-                    }
-                }
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-            } else {
-                Self::propagate_range(
-                    line_num,
-                    &active_ranges,
-                    active_all_range,
-                    &enable_exceptions,
-                    &mut map,
-                );
-            }
+            Self::handle_line(
+                line,
+                line_num,
+                &mut active_ranges,
+                &mut active_all_range,
+                &mut enable_exceptions,
+                &mut map,
+            );
         }
 
         map
+    }
+
+    fn handle_line(
+        line: &str,
+        line_num: usize,
+        active_ranges: &mut HashMap<String, usize>,
+        active_all_range: &mut Option<usize>,
+        enable_exceptions: &mut HashSet<String>,
+        map: &mut SuppressionMap,
+    ) {
+        let trimmed = line.trim();
+
+        let comment_text = if let Some(text) = trimmed.strip_prefix("//") {
+            text.trim()
+        } else {
+            Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+            return;
+        };
+
+        if let Some(rest) = comment_text.strip_prefix(DISABLE_NEXT_LINE) {
+            Self::handle_disable_next_line(
+                rest.trim(),
+                line_num,
+                map,
+                active_ranges,
+                *active_all_range,
+                enable_exceptions,
+            );
+        } else if let Some(rest) = comment_text.strip_prefix(ENABLE) {
+            Self::handle_enable(
+                rest.trim(),
+                line_num,
+                active_ranges,
+                active_all_range,
+                enable_exceptions,
+                map,
+            );
+        } else if let Some(rest) = comment_text.strip_prefix(DISABLE) {
+            Self::handle_disable(
+                rest.trim(),
+                line_num,
+                active_ranges,
+                active_all_range,
+                enable_exceptions,
+                map,
+            );
+        } else {
+            Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+        }
+    }
+
+    fn handle_disable_next_line(
+        rest: &str,
+        line_num: usize,
+        map: &mut SuppressionMap,
+        active_ranges: &HashMap<String, usize>,
+        active_all_range: Option<usize>,
+        enable_exceptions: &HashSet<String>,
+    ) {
+        let rules = parse_rule_ids(rest);
+        let target_line = line_num + 1;
+        // Merge with any existing rules for the same target line
+        let entry = map
+            .next_line
+            .entry(target_line)
+            .or_default();
+        if rules.is_empty() {
+            // No specific rules = suppress all
+            entry.insert(ALL_RULES.to_string());
+        } else {
+            entry.extend(rules);
+        }
+        Self::propagate_range(line_num, active_ranges, active_all_range, enable_exceptions, map);
+    }
+
+    fn handle_enable(
+        rest: &str,
+        line_num: usize,
+        active_ranges: &mut HashMap<String, usize>,
+        active_all_range: &mut Option<usize>,
+        enable_exceptions: &mut HashSet<String>,
+        map: &mut SuppressionMap,
+    ) {
+        let rules = parse_rule_ids(rest);
+        if rules.is_empty() {
+            *active_all_range = None;
+            active_ranges.clear();
+            enable_exceptions.clear();
+        } else if active_all_range.is_some() {
+            // Record as exceptions to the active all-range
+            for rule_id in &rules {
+                enable_exceptions.insert(rule_id.clone());
+            }
+        } else {
+            for rule_id in &rules {
+                active_ranges.remove(rule_id);
+            }
+        }
+        Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+    }
+
+    fn handle_disable(
+        rest: &str,
+        line_num: usize,
+        active_ranges: &mut HashMap<String, usize>,
+        active_all_range: &mut Option<usize>,
+        enable_exceptions: &mut HashSet<String>,
+        map: &mut SuppressionMap,
+    ) {
+        let rules = parse_rule_ids(rest);
+        if rules.is_empty() {
+            *active_all_range = Some(line_num);
+            enable_exceptions.clear();
+        } else {
+            for rule_id in rules {
+                active_ranges.entry(rule_id).or_insert(line_num);
+            }
+        }
+        Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
     }
 
     fn propagate_range(

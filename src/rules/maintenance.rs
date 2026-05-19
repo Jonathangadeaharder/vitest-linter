@@ -1,5 +1,5 @@
 use crate::models::{
-    Category, HookKind, ModuleGraph, ParsedModule, Severity, TestRuntime, Violation,
+    Category, HookKind, ModuleGraph, ParsedModule, Severity, TestBlock, TestRuntime, Violation,
 };
 use crate::rules::Rule;
 
@@ -650,52 +650,14 @@ impl ImplementationCoupledRule {
         _ctx: &crate::rules::LintContext<'_>,
         graph: &ModuleGraph,
     ) -> Option<Violation> {
-        let prod_imports: Vec<&str> = module
-            .imports_parsed
-            .iter()
-            .filter(|imp| {
-                !imp.source.starts_with("vitest")
-                    && !imp.source.starts_with("@testing-library")
-                    && !imp.source.starts_with("jest")
-                    && !imp.source.starts_with("@jest")
-                    && !imp.source.contains("node_modules")
-            })
-            .map(|imp| imp.source.as_str())
-            .collect();
+        let prod_imports = Self::filter_prod_imports(module);
 
         if prod_imports.len() != 1 {
             return None;
         }
 
-        // Resolve the source module from the graph and get its exports.
         let source_module_path = prod_imports[0];
-        let resolved = _ctx.config.resolve_module_path(source_module_path);
-        let source_module = graph
-            .get_module(std::path::Path::new(&resolved))
-            .or_else(|| {
-                // Try resolving relative imports by checking extensions and index files
-                if resolved.starts_with('.') || resolved.starts_with('/') {
-                    if let Some(parent) = module.file_path.parent() {
-                        let base = parent.join(&resolved);
-                        let exts = ["ts", "tsx", "js", "jsx"];
-                        for ext in &exts {
-                            let candidate = base.with_extension(ext);
-                            if let Some(m) = graph.get_module(&candidate) {
-                                return Some(m);
-                            }
-                        }
-                        for ext in &exts {
-                            let candidate = base.join(format!("index.{}", ext));
-                            if let Some(m) = graph.get_module(&candidate) {
-                                return Some(m);
-                            }
-                        }
-                    }
-                }
-                None
-            });
-
-        let source_module = source_module?;
+        let source_module = Self::resolve_source_module(module, source_module_path, _ctx, graph)?;
 
         let export_count = source_module.exports.len();
         let test_count = module.test_blocks.len();
@@ -715,18 +677,7 @@ impl ImplementationCoupledRule {
             .map(|e| e.name.to_lowercase())
             .collect();
 
-        let matching = module
-            .test_blocks
-            .iter()
-            .filter(|tb| {
-                let test_name_lower = tb.name.to_lowercase();
-                export_names
-                    .iter()
-                    .any(|en| contains_word(&test_name_lower, en))
-            })
-            .count();
-
-        let match_ratio = matching as f64 / test_count as f64;
+        let match_ratio = Self::compute_name_match_ratio(&module.test_blocks, &export_names);
         if match_ratio < 0.8 {
             return None;
         }
@@ -752,6 +703,68 @@ impl ImplementationCoupledRule {
             ),
             test_name: None,
         })
+    }
+
+    /// Filters out test-framework / node_modules imports, keeping only production imports.
+    fn filter_prod_imports(module: &ParsedModule) -> Vec<&str> {
+        module
+            .imports_parsed
+            .iter()
+            .filter(|imp| {
+                !imp.source.starts_with("vitest")
+                    && !imp.source.starts_with("@testing-library")
+                    && !imp.source.starts_with("jest")
+                    && !imp.source.starts_with("@jest")
+                    && !imp.source.contains("node_modules")
+            })
+            .map(|imp| imp.source.as_str())
+            .collect()
+    }
+
+    /// Resolves an import path to a parsed module, trying relative paths with extensions
+    /// and index files when the direct path doesn't match.
+    fn resolve_source_module<'a>(
+        module: &ParsedModule,
+        source_path: &str,
+        ctx: &crate::rules::LintContext<'_>,
+        graph: &'a ModuleGraph,
+    ) -> Option<&'a ParsedModule> {
+        let resolved = ctx.config.resolve_module_path(source_path);
+        graph.get_module(std::path::Path::new(&resolved)).or_else(|| {
+            if resolved.starts_with('.') || resolved.starts_with('/') {
+                if let Some(parent) = module.file_path.parent() {
+                    let base = parent.join(&resolved);
+                    let exts = ["ts", "tsx", "js", "jsx"];
+                    for ext in &exts {
+                        let candidate = base.with_extension(ext);
+                        if let Some(m) = graph.get_module(&candidate) {
+                            return Some(m);
+                        }
+                    }
+                    for ext in &exts {
+                        let candidate = base.join(format!("index.{}", ext));
+                        if let Some(m) = graph.get_module(&candidate) {
+                            return Some(m);
+                        }
+                    }
+                }
+            }
+            None
+        })
+    }
+
+    /// Computes the fraction of test blocks whose names contain at least one export name.
+    fn compute_name_match_ratio(test_blocks: &[TestBlock], export_names: &[String]) -> f64 {
+        let matching = test_blocks
+            .iter()
+            .filter(|tb| {
+                let test_name_lower = tb.name.to_lowercase();
+                export_names
+                    .iter()
+                    .any(|en| contains_word(&test_name_lower, en))
+            })
+            .count();
+        matching as f64 / test_blocks.len() as f64
     }
 }
 

@@ -133,26 +133,7 @@ impl Config {
             Self::default()
         };
 
-        // Check for package.json override
-        if let Some(pkg_dir) = find_package_json_dir(start) {
-            let pkg_path = pkg_dir.join("package.json");
-            if let Ok(pkg_text) = std::fs::read_to_string(&pkg_path) {
-                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&pkg_text) {
-                    if let Some(vl_config) = pkg.get("vitest-linter") {
-                        if let Some(select) = vl_config.get("select").and_then(|s| s.as_object()) {
-                            for (key, val) in select {
-                                if let Some(severity) = val.as_str() {
-                                    config
-                                        .rules
-                                        .select
-                                        .insert(key.clone(), severity.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        merge_package_json_overrides(&mut config, start);
 
         Ok(config)
     }
@@ -385,6 +366,35 @@ fn find_package_json_dir(start: &Path) -> Option<PathBuf> {
         cur = dir.parent().map(Path::to_path_buf);
     }
     None
+}
+
+/// Merge `vitest-linter` config from `package.json` into the config struct.
+/// Uses early returns to keep cognitive complexity low.
+fn merge_package_json_overrides(config: &mut Config, start: &Path) {
+    let pkg_dir = match find_package_json_dir(start) {
+        Some(d) => d,
+        None => return,
+    };
+    let pkg_path = pkg_dir.join("package.json");
+    let pkg_text = match std::fs::read_to_string(&pkg_path) {
+        Ok(t) => t,
+        Err(_) => return,
+    };
+    let pkg = match serde_json::from_str::<serde_json::Value>(&pkg_text) {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let Some(vl_config) = pkg.get("vitest-linter") else {
+        return;
+    };
+    let Some(select) = vl_config.get("select").and_then(|s| s.as_object()) else {
+        return;
+    };
+    for (key, val) in select {
+        if let Some(severity) = val.as_str() {
+            config.rules.select.insert(key.clone(), severity.to_string());
+        }
+    }
 }
 
 /// Match a `vi.mock(<source>)` source string against the banlist. The check

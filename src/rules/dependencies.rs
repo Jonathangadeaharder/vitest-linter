@@ -1,5 +1,6 @@
 use crate::config::matches_path;
-use crate::models::{Category, ModuleGraph, ParsedModule, Severity, Violation};
+use crate::config::BannedSingleton;
+use crate::models::{Category, ImportEntry, ModuleGraph, ParsedModule, Severity, ViMockCall, Violation};
 use crate::rules::{LintContext, Rule};
 
 const STABLE_DEP_SUFFIXES: &[&str] = &[
@@ -150,60 +151,14 @@ impl Rule for ProductionSingletonImportRule {
             }
         }
 
+        let rid = self.id();
+        let rname = self.name();
+        let sev = self.severity();
+        let cat = self.category();
         let mut out = Vec::new();
         for imp in &module.imports_parsed {
             for ban in banned {
-                if !ban.from.is_match(imp.source.as_str())
-                    && !ban.from.is_match(strip_relative(imp.source.as_str()))
-                {
-                    continue;
-                }
-                // Check named imports.
-                for name in &imp.named {
-                    if ban.names.iter().any(|n| n == name) {
-                        out.push(Violation {
-                            rule_id: self.id().to_string(),
-                            rule_name: self.name().to_string(),
-                            severity: self.severity(),
-                            category: self.category(),
-                            message: format!(
-                                "Importing production singleton `{}` from `{}` triggers its constructor side effects in unit tests",
-                                name, imp.source
-                            ),
-                            file_path: module.file_path.clone(),
-                            line: imp.line,
-                            col: None,
-                            suggestion: Some(
-                                "Construct a fresh instance with fakes (DI). Singletons belong in *.integration.test.ts only."
-                                    .to_string(),
-                            ),
-                            test_name: None,
-                        });
-                    }
-                }
-                // Check default import.
-                if let Some(default_name) = &imp.default {
-                    if ban.names.iter().any(|n| n == default_name) {
-                        out.push(Violation {
-                            rule_id: self.id().to_string(),
-                            rule_name: self.name().to_string(),
-                            severity: self.severity(),
-                            category: self.category(),
-                            message: format!(
-                                "Importing production singleton `{}` from `{}` triggers its constructor side effects in unit tests",
-                                default_name, imp.source
-                            ),
-                            file_path: module.file_path.clone(),
-                            line: imp.line,
-                            col: None,
-                            suggestion: Some(
-                                "Construct a fresh instance with fakes (DI). Singletons belong in *.integration.test.ts only."
-                                    .to_string(),
-                            ),
-                            test_name: None,
-                        });
-                    }
-                }
+                out.extend(check_singleton_import(imp, ban, module, rid, rname, sev, cat));
             }
         }
         out
@@ -288,70 +243,90 @@ impl Rule for MockExportValidationRule {
         ctx: &LintContext<'_>,
         graph: &ModuleGraph,
     ) -> Vec<Violation> {
+        let rid = self.id();
+        let rname = self.name();
+        let sev = self.severity();
+        let cat = self.category();
         let mut violations = Vec::new();
 
         for mock in &module.vi_mocks {
-            // Skip if no factory function
             if mock.factory_keys.is_empty() {
                 continue;
             }
 
-            // Try to resolve the mock source to a source module in the graph
-            let resolved = ctx.config.resolve_module_path(&mock.source);
-            let source_module = graph
-                .get_module(std::path::Path::new(&resolved))
-                .or_else(|| {
-                    // Try resolving relative imports by checking extensions
-                    if resolved.starts_with('.') {
-                        if let Some(parent) = module.file_path.parent() {
-                            let base = parent.join(&resolved);
-                            let exts = ["ts", "tsx", "js", "jsx"];
-                            for ext in &exts {
-                                let candidate = base.with_extension(ext);
-                                if let Some(m) = graph.get_module(&candidate) {
-                                    return Some(m);
-                                }
-                            }
-                        }
-                    }
-                    None
-                });
-
-            if let Some(source_module) = source_module {
-                let export_names: Vec<String> = source_module
-                    .exports
-                    .iter()
-                    .map(|e| e.name.clone())
-                    .collect();
-
-                // Check if factory keys match exports
-                for key in &mock.factory_keys {
-                    if !export_names.contains(key) && key != "__esModule" {
-                        violations.push(Violation {
-                            rule_id: self.id().to_string(),
-                            rule_name: self.name().to_string(),
-                            severity: self.severity(),
-                            category: self.category(),
-                            message: format!(
-                                "vi.mock('{}') factory returns '{}' which is not exported by the source module",
-                                mock.source, key
-                            ),
-                            file_path: module.file_path.clone(),
-                            line: mock.line,
-                            col: None,
-                            suggestion: Some(
-                                "Remove the non-existent export from the mock factory or add it to the source module"
-                                    .to_string(),
-                            ),
-                            test_name: None,
-                        });
-                    }
-                }
+            let source_module = resolve_mock_source_module(mock, module, ctx, graph);
+            if let Some(sm) = source_module {
+                violations.extend(validate_factory_keys(mock, sm, module, rid, rname, sev, cat));
             }
         }
 
         violations
     }
+}
+
+fn resolve_mock_source_module<'a>(
+    mock: &ViMockCall,
+    module: &ParsedModule,
+    ctx: &LintContext<'_>,
+    graph: &'a ModuleGraph,
+) -> Option<&'a ParsedModule> {
+    let resolved = ctx.config.resolve_module_path(&mock.source);
+    graph
+        .get_module(std::path::Path::new(&resolved))
+        .or_else(|| {
+            if resolved.starts_with('.') {
+                if let Some(parent) = module.file_path.parent() {
+                    let base = parent.join(&resolved);
+                    for ext in ["ts", "tsx", "js", "jsx"] {
+                        if let Some(m) = graph.get_module(&base.with_extension(ext)) {
+                            return Some(m);
+                        }
+                    }
+                }
+            }
+            None
+        })
+}
+
+fn validate_factory_keys(
+    mock: &ViMockCall,
+    source_module: &ParsedModule,
+    module: &ParsedModule,
+    rule_id: &str,
+    rule_name: &str,
+    severity: Severity,
+    category: Category,
+) -> Vec<Violation> {
+    let export_names: Vec<String> = source_module
+        .exports
+        .iter()
+        .map(|e| e.name.clone())
+        .collect();
+
+    let mut violations = Vec::new();
+    for key in &mock.factory_keys {
+        if !export_names.contains(key) && key != "__esModule" {
+            violations.push(Violation {
+                rule_id: rule_id.to_string(),
+                rule_name: rule_name.to_string(),
+                severity,
+                category,
+                message: format!(
+                    "vi.mock('{}') factory returns '{}' which is not exported by the source module",
+                    mock.source, key
+                ),
+                file_path: module.file_path.clone(),
+                line: mock.line,
+                col: None,
+                suggestion: Some(
+                    "Remove the non-existent export from the mock factory or add it to the source module"
+                        .to_string(),
+                ),
+                test_name: None,
+            });
+        }
+    }
+    violations
 }
 
 fn strip_relative(s: &str) -> &str {
@@ -360,6 +335,64 @@ fn strip_relative(s: &str) -> &str {
         s = rest;
     }
     s
+}
+
+fn make_singleton_violation(
+    name: &str,
+    imp: &ImportEntry,
+    module: &ParsedModule,
+    rule_id: &str,
+    rule_name: &str,
+    severity: Severity,
+    category: Category,
+) -> Violation {
+    Violation {
+        rule_id: rule_id.to_string(),
+        rule_name: rule_name.to_string(),
+        severity,
+        category,
+        message: format!(
+            "Importing production singleton `{}` from `{}` triggers its constructor side effects in unit tests",
+            name, imp.source
+        ),
+        file_path: module.file_path.clone(),
+        line: imp.line,
+        col: None,
+        suggestion: Some(
+            "Construct a fresh instance with fakes (DI). Singletons belong in *.integration.test.ts only."
+                .to_string(),
+        ),
+        test_name: None,
+    }
+}
+
+fn check_singleton_import(
+    imp: &ImportEntry,
+    ban: &BannedSingleton,
+    module: &ParsedModule,
+    rule_id: &str,
+    rule_name: &str,
+    severity: Severity,
+    category: Category,
+) -> Vec<Violation> {
+    if !ban.from.is_match(imp.source.as_str())
+        && !ban.from.is_match(strip_relative(imp.source.as_str()))
+    {
+        return vec![];
+    }
+
+    let mut out = Vec::new();
+    for name in &imp.named {
+        if ban.names.iter().any(|n| n == name) {
+            out.push(make_singleton_violation(name, imp, module, rule_id, rule_name, severity, category));
+        }
+    }
+    if let Some(default_name) = &imp.default {
+        if ban.names.iter().any(|n| n == default_name) {
+            out.push(make_singleton_violation(default_name, imp, module, rule_id, rule_name, severity, category));
+        }
+    }
+    out
 }
 
 #[cfg(test)]

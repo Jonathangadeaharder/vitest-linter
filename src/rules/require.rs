@@ -159,47 +159,52 @@ impl Rule for RequireToThrowMessageRule {
     }
 }
 
+fn has_empty_throw_args(after: &str) -> bool {
+    // after is the text following "toThrow", starting with '('
+    let rest = after.strip_prefix('(').expect("must start with '('");
+    let mut depth = 1_u32;
+    let mut has_content = false;
+
+    for ch in rest.chars() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {
+                if depth == 1 && !ch.is_whitespace() && ch != ',' {
+                    has_content = true;
+                }
+            }
+        }
+    }
+
+    !has_content
+}
+
+fn has_empty_to_throw_no_parens(after: &str) -> bool {
+    let trimmed = after.trim_start();
+    trimmed.is_empty()
+        || trimmed.starts_with('.')
+        || trimmed.starts_with(';')
+        || trimmed.starts_with(')')
+}
+
 fn has_empty_to_throw(line: &str) -> bool {
     let mut search_from = 0;
     while let Some(pos) = line[search_from..].find("toThrow") {
         let abs_pos = search_from + pos;
         let after = &line[abs_pos + "toThrow".len()..];
 
-        if let Some(rest) = after.strip_prefix('(') {
-            let depth = 1;
-            let char_iter = rest.char_indices();
-            let mut d = depth;
-            let mut has_content = false;
-
-            for (_, ch) in char_iter {
-                match ch {
-                    '(' => d += 1,
-                    ')' => {
-                        d -= 1;
-                        if d == 0 {
-                            break;
-                        }
-                    }
-                    _ => {
-                        if d == 1 && !ch.is_whitespace() && ch != ',' {
-                            has_content = true;
-                        }
-                    }
-                }
-            }
-
-            if !has_content {
+        if after.starts_with('(') {
+            if has_empty_throw_args(after) {
                 return true;
             }
-        } else {
-            let trimmed_after = after.trim_start();
-            if trimmed_after.is_empty()
-                || trimmed_after.starts_with('.')
-                || trimmed_after.starts_with(';')
-                || trimmed_after.starts_with(')')
-            {
-                return true;
-            }
+        } else if has_empty_to_throw_no_parens(after) {
+            return true;
         }
 
         search_from = abs_pos + 1;
