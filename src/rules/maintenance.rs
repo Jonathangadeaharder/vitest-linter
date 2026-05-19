@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::models::{
     Category, HookKind, ModuleGraph, ParsedModule, Severity, TestBlock, TestRuntime, Violation,
 };
@@ -730,27 +732,17 @@ impl ImplementationCoupledRule {
         graph: &'a ModuleGraph,
     ) -> Option<&'a ParsedModule> {
         let resolved = ctx.config.resolve_module_path(source_path);
-        graph.get_module(std::path::Path::new(&resolved)).or_else(|| {
-            if resolved.starts_with('.') || resolved.starts_with('/') {
-                if let Some(parent) = module.file_path.parent() {
-                    let base = parent.join(&resolved);
-                    let exts = ["ts", "tsx", "js", "jsx"];
-                    for ext in &exts {
-                        let candidate = base.with_extension(ext);
-                        if let Some(m) = graph.get_module(&candidate) {
-                            return Some(m);
-                        }
-                    }
-                    for ext in &exts {
-                        let candidate = base.join(format!("index.{}", ext));
-                        if let Some(m) = graph.get_module(&candidate) {
-                            return Some(m);
-                        }
-                    }
-                }
-            }
-            None
-        })
+        if let Some(m) = graph.get_module(Path::new(&resolved)) {
+            return Some(m);
+        }
+        if !resolved.starts_with('.') && !resolved.starts_with('/') {
+            return None;
+        }
+        let parent = module.file_path.parent()?;
+        let base = parent.join(&resolved);
+        let exts = ["ts", "tsx", "js", "jsx"];
+        try_resolve_extension(&base, &exts, graph)
+            .or_else(|| try_resolve_index(&base, &exts, graph))
     }
 
     /// Computes the fraction of test blocks whose names contain at least one export name.
@@ -766,6 +758,28 @@ impl ImplementationCoupledRule {
             .count();
         matching as f64 / test_blocks.len() as f64
     }
+}
+
+/// Try to resolve a module by appending each extension to the base path.
+fn try_resolve_extension<'a>(base: &Path, exts: &[&str], graph: &'a ModuleGraph) -> Option<&'a ParsedModule> {
+    for ext in exts {
+        let candidate = base.with_extension(ext);
+        if let Some(m) = graph.get_module(&candidate) {
+            return Some(m);
+        }
+    }
+    None
+}
+
+/// Try to resolve a module by looking for index files with each extension.
+fn try_resolve_index<'a>(base: &Path, exts: &[&str], graph: &'a ModuleGraph) -> Option<&'a ParsedModule> {
+    for ext in exts {
+        let candidate = base.join(format!("index.{}", ext));
+        if let Some(m) = graph.get_module(&candidate) {
+            return Some(m);
+        }
+    }
+    None
 }
 
 pub struct TestIdNegativePresenceRule;

@@ -252,16 +252,7 @@ fn evaluate_rules(
                 }
                 let global_idx = indices[local_idx];
                 let mut v = rule.check(module, &ctx, graph);
-                if let Some(override_sev) = config.rules.severity_override(rule.id()) {
-                    for violation in &mut v {
-                        violation.severity = match override_sev.to_ascii_lowercase().as_str() {
-                            "error" => crate::models::Severity::Error,
-                            "warning" => crate::models::Severity::Warning,
-                            "info" => crate::models::Severity::Info,
-                            _ => violation.severity,
-                        };
-                    }
-                }
+                apply_severity_overrides(&mut v, config, rule.id());
                 let suppression = &suppressions[global_idx];
                 v.retain(|violation| {
                     !suppression.is_suppressed(violation.line, &violation.rule_id)
@@ -277,6 +268,21 @@ fn evaluate_rules(
             .then_with(|| a.line.cmp(&b.line))
     });
     violations
+}
+
+/// Apply severity overrides from config to a list of violations.
+fn apply_severity_overrides(v: &mut Vec<Violation>, config: &Config, rule_id: &str) {
+    let Some(override_sev) = config.rules.severity_override(rule_id) else {
+        return;
+    };
+    for violation in &mut *v {
+        violation.severity = match override_sev.to_ascii_lowercase().as_str() {
+            "error" => crate::models::Severity::Error,
+            "warning" => crate::models::Severity::Warning,
+            "info" => crate::models::Severity::Info,
+            _ => violation.severity,
+        };
+    }
 }
 
 // ---------------------------------------------------------------------------
