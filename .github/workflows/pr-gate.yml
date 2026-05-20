@@ -15,7 +15,7 @@ jobs:
   repo-hygiene:
     name: Repo Hygiene
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
       - name: Check for iCloud sync conflicts
@@ -29,7 +29,7 @@ jobs:
   rust-quality:
     name: Rust Quality
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -48,7 +48,7 @@ jobs:
   dependency-scan:
     name: Dependency Scan
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
       - name: Install Trivy
@@ -59,7 +59,7 @@ jobs:
   secret-scanning:
     name: Secret Scanning
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -72,7 +72,7 @@ jobs:
   structure:
     name: Repository Structure
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -92,7 +92,7 @@ jobs:
   cargo-test-lint:
     name: Test Quality (Rust)
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -103,7 +103,7 @@ jobs:
 
   required-checks:
     name: Required Checks (PR)
-    runs-on: ["self-hosted", "macOS", "X64"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     needs:
       - repo-hygiene
       - rust-quality
