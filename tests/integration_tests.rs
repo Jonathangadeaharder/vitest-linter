@@ -768,7 +768,7 @@ describe.only('focused suite', () => {
 "#,
     );
     let engine = LintEngine::new(true).unwrap();
-    let (violations, _diagnostics) = engine.lint_paths(&[path]).unwrap();
+    let (violations, _) = engine.lint_paths(&[path]).unwrap();
     let v = find_violation(&violations, "VITEST-MNT-007");
     assert!(
         v.is_some(),
@@ -3742,10 +3742,10 @@ test('no assertions pw', async ({ page }) => {
     );
     let engine = LintEngine::new(true).unwrap();
     let (violations, _) = engine.lint_paths(&[path]).unwrap();
-    let v = find_violation(&violations, "VITEST-MNT-008");
+    let v = find_violation(&violations, "VITEST-MNT-001");
     assert!(
         v.is_some(),
-        "Expected VITEST-MNT-008 for vi.stubGlobal without vi.unstubAllGlobals"
+        "NoAssertionRule should fire on Playwright files too"
     );
 }
 

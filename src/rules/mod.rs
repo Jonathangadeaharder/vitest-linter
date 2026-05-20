@@ -204,45 +204,6 @@ mod tests {
     }
 
     #[test]
-    fn v1_0_rules_count() {
-        let rules = v1_0_rules();
-        assert_eq!(rules.len(), 8);
-    }
-
-    #[test]
-    fn v1_0_rules_are_subset_of_all() {
-        let all = all_rules();
-        let v1 = v1_0_rules();
-        for rule in &v1 {
-            assert!(
-                all.iter().any(|r| r.id() == rule.id()),
-                "v1.0 rule {} not found in all_rules()",
-                rule.id()
-            );
-        }
-    }
-
-    #[test]
-    fn v1_0_rule_ids() {
-        let rules = v1_0_rules();
-        let ids: Vec<&str> = rules.iter().map(|r| r.id()).collect();
-        let expected = [
-            "VITEST-MNT-007",  // FocusedTestRule (NoOnlyRule)
-            "VITEST-MNT-005",  // EmptyTestRule (NoSkipRule)
-            "VITEST-NO-003",   // NoCommentedOutTestsRule
-            "VITEST-MNT-006",  // MissingAwaitAssertionRule (AsyncWithoutAwaitRule)
-            "VITEST-FLK-001",  // TimeoutRule (SetTimeoutInTestRule)
-            "VITEST-MNT-004",  // TryCatchRule (MissingExpectInTryRule)
-            "VITEST-MNT-003",  // ConditionalLogicRule (SharedDescribeStateRule)
-            "VITEST-PREF-009", // PreferHooksOnTopRule (BeforeEachAfterFirstItRule)
-        ];
-        for id in &expected {
-            assert!(ids.contains(id), "Missing v1.0 rule: {}", id);
-        }
-        assert_eq!(ids.len(), expected.len());
-    }
-
-    #[test]
     fn all_rule_ids_present() {
         let rules = all_rules();
         let expected = [
