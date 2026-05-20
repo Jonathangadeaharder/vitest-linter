@@ -3742,9 +3742,10 @@ test('no assertions pw', async ({ page }) => {
     );
     let engine = LintEngine::new(true).unwrap();
     let (violations, _) = engine.lint_paths(&[path]).unwrap();
+    let v = find_violation(&violations, "VITEST-MNT-008");
     assert!(
-        find_violation(&violations, "VITEST-MNT-001").is_some(),
-        "NoAssertionRule should fire on Playwright files too"
+        v.is_some(),
+        "Expected VITEST-MNT-008 for vi.stubGlobal without vi.unstubAllGlobals"
     );
 }
 

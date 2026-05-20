@@ -5,6 +5,7 @@ use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::config::{Config, TsConfig};
+use crate::config::{Config, TsConfig};
 use crate::models::{Diagnostic, ModuleGraph, ParsedModule, Violation};
 use crate::parser::TsParser;
 use crate::rules::{all_rules, v1_0_rules, LintContext, Rule};
