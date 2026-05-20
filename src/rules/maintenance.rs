@@ -761,7 +761,11 @@ impl ImplementationCoupledRule {
 }
 
 /// Try to resolve a module by appending each extension to the base path.
-fn try_resolve_extension<'a>(base: &Path, exts: &[&str], graph: &'a ModuleGraph) -> Option<&'a ParsedModule> {
+fn try_resolve_extension<'a>(
+    base: &Path,
+    exts: &[&str],
+    graph: &'a ModuleGraph,
+) -> Option<&'a ParsedModule> {
     for ext in exts {
         let candidate = base.with_extension(ext);
         if let Some(m) = graph.get_module(&candidate) {
@@ -772,7 +776,11 @@ fn try_resolve_extension<'a>(base: &Path, exts: &[&str], graph: &'a ModuleGraph)
 }
 
 /// Try to resolve a module by looking for index files with each extension.
-fn try_resolve_index<'a>(base: &Path, exts: &[&str], graph: &'a ModuleGraph) -> Option<&'a ParsedModule> {
+fn try_resolve_index<'a>(
+    base: &Path,
+    exts: &[&str],
+    graph: &'a ModuleGraph,
+) -> Option<&'a ParsedModule> {
     for ext in exts {
         let candidate = base.join(format!("index.{}", ext));
         if let Some(m) = graph.get_module(&candidate) {

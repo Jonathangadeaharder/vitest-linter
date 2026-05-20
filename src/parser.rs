@@ -269,7 +269,13 @@ impl TsParser {
         }
     }
 
-    fn track_vi_mock(full_callee: &str, node: Node, source: &str, scope: MockScope, ctx: &mut Context) {
+    fn track_vi_mock(
+        full_callee: &str,
+        node: Node,
+        source: &str,
+        scope: MockScope,
+        ctx: &mut Context,
+    ) {
         if full_callee != "vi.mock" {
             return;
         }
@@ -318,7 +324,15 @@ impl TsParser {
         match func_name {
             "test" | "it" | "fit" | "xit" => {
                 Self::dispatch_test_call(
-                    full_callee, is_skip, is_only, node, source, path, describe_depth, scope, ctx,
+                    full_callee,
+                    is_skip,
+                    is_only,
+                    node,
+                    source,
+                    path,
+                    describe_depth,
+                    scope,
+                    ctx,
                 );
             }
             "describe" | "fdescribe" | "xdescribe" => {
@@ -348,8 +362,7 @@ impl TsParser {
         if full_callee.starts_with("test.describe") {
             Self::add_describe_block(node, source, path, describe_depth, is_only, scope, ctx);
         } else {
-            let uses_fit_or_xit =
-                full_callee.starts_with("fit") || full_callee.starts_with("xit");
+            let uses_fit_or_xit = full_callee.starts_with("fit") || full_callee.starts_with("xit");
             if let Some(tb) = Self::extract_test(
                 node,
                 source,
@@ -466,7 +479,12 @@ impl TsParser {
         }
     }
 
-    fn collect_export_clause(child: Node, source: &str, exports: &mut Vec<ExportEntry>, line: usize) {
+    fn collect_export_clause(
+        child: Node,
+        source: &str,
+        exports: &mut Vec<ExportEntry>,
+        line: usize,
+    ) {
         for j in 0..child.named_child_count() {
             let Some(spec) = child.named_child(j) else {
                 continue;
@@ -539,7 +557,12 @@ impl TsParser {
         }
     }
 
-    fn collect_export_identifier(child: Node, source: &str, exports: &mut Vec<ExportEntry>, line: usize) {
+    fn collect_export_identifier(
+        child: Node,
+        source: &str,
+        exports: &mut Vec<ExportEntry>,
+        line: usize,
+    ) {
         let name = child.utf8_text(source.as_bytes()).unwrap_or("").to_string();
         if !name.is_empty() {
             exports.push(ExportEntry {
@@ -813,9 +836,8 @@ impl TsParser {
         for j in 0..child.named_child_count() {
             if let Some(inner) = child.named_child(j) {
                 if inner.kind() == "identifier" {
-                    entry.namespace = Some(
-                        inner.utf8_text(source.as_bytes()).unwrap_or("").to_string(),
-                    );
+                    entry.namespace =
+                        Some(inner.utf8_text(source.as_bytes()).unwrap_or("").to_string());
                 }
             }
         }

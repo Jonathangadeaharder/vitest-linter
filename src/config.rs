@@ -392,7 +392,10 @@ fn merge_package_json_overrides(config: &mut Config, start: &Path) {
     };
     for (key, val) in select {
         if let Some(severity) = val.as_str() {
-            config.rules.select.insert(key.clone(), severity.to_string());
+            config
+                .rules
+                .select
+                .insert(key.clone(), severity.to_string());
         }
     }
 }

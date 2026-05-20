@@ -62,7 +62,13 @@ impl SuppressionMap {
         let comment_text = if let Some(text) = trimmed.strip_prefix("//") {
             text.trim()
         } else {
-            Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+            Self::propagate_range(
+                line_num,
+                active_ranges,
+                *active_all_range,
+                enable_exceptions,
+                map,
+            );
             return;
         };
 
@@ -94,7 +100,13 @@ impl SuppressionMap {
                 map,
             );
         } else {
-            Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+            Self::propagate_range(
+                line_num,
+                active_ranges,
+                *active_all_range,
+                enable_exceptions,
+                map,
+            );
         }
     }
 
@@ -109,17 +121,20 @@ impl SuppressionMap {
         let rules = parse_rule_ids(rest);
         let target_line = line_num + 1;
         // Merge with any existing rules for the same target line
-        let entry = map
-            .next_line
-            .entry(target_line)
-            .or_default();
+        let entry = map.next_line.entry(target_line).or_default();
         if rules.is_empty() {
             // No specific rules = suppress all
             entry.insert(ALL_RULES.to_string());
         } else {
             entry.extend(rules);
         }
-        Self::propagate_range(line_num, active_ranges, active_all_range, enable_exceptions, map);
+        Self::propagate_range(
+            line_num,
+            active_ranges,
+            active_all_range,
+            enable_exceptions,
+            map,
+        );
     }
 
     fn handle_enable(
@@ -145,7 +160,13 @@ impl SuppressionMap {
                 active_ranges.remove(rule_id);
             }
         }
-        Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+        Self::propagate_range(
+            line_num,
+            active_ranges,
+            *active_all_range,
+            enable_exceptions,
+            map,
+        );
     }
 
     fn handle_disable(
@@ -165,7 +186,13 @@ impl SuppressionMap {
                 active_ranges.entry(rule_id).or_insert(line_num);
             }
         }
-        Self::propagate_range(line_num, active_ranges, *active_all_range, enable_exceptions, map);
+        Self::propagate_range(
+            line_num,
+            active_ranges,
+            *active_all_range,
+            enable_exceptions,
+            map,
+        );
     }
 
     fn propagate_range(

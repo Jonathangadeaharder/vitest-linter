@@ -126,9 +126,7 @@ impl LintEngine {
     }
 
     /// Group modules by their resolved config root directory.
-    fn group_by_config(
-        modules: &[ParsedModule],
-    ) -> HashMap<PathBuf, (Config, Vec<usize>)> {
+    fn group_by_config(modules: &[ParsedModule]) -> HashMap<PathBuf, (Config, Vec<usize>)> {
         let mut groups: HashMap<PathBuf, (Config, Vec<usize>)> = HashMap::new();
         for (idx, module) in modules.iter().enumerate() {
             let config_root = Self::resolve_config_root(&module.file_path);
@@ -200,10 +198,8 @@ impl LintEngine {
     /// Discover source modules referenced by imports in test files.
     /// Skips node_modules and external packages.
     fn discover_source_modules(modules: &[ParsedModule]) -> Vec<ParsedModule> {
-        let mut source_files: Vec<PathBuf> = modules
-            .iter()
-            .flat_map(collect_source_paths)
-            .collect();
+        let mut source_files: Vec<PathBuf> =
+            modules.iter().flat_map(collect_source_paths).collect();
 
         source_files.sort();
         source_files.dedup();

@@ -52,7 +52,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Trivy
-        run: brew install aquasecurity/trivy/trivy
+        run: |
+          brew uninstall --ignore-dependencies trivy 2>/dev/null || true
+          brew install aquasecurity/trivy/trivy
       - name: Run Trivy filesystem scan
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed .
 
