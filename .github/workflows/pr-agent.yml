@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   pr-agent:
-    runs-on: ["self-hosted", "python", "macos"]
+    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
     permissions:
       contents: read
       pull-requests: write

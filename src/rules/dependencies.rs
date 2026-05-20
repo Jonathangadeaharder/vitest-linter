@@ -1,6 +1,8 @@
 use crate::config::matches_path;
 use crate::config::BannedSingleton;
-use crate::models::{Category, ImportEntry, ModuleGraph, ParsedModule, Severity, ViMockCall, Violation};
+use crate::models::{
+    Category, ImportEntry, ModuleGraph, ParsedModule, Severity, ViMockCall, Violation,
+};
 use crate::rules::{LintContext, Rule};
 
 const STABLE_DEP_SUFFIXES: &[&str] = &[
@@ -158,7 +160,9 @@ impl Rule for ProductionSingletonImportRule {
         let mut out = Vec::new();
         for imp in &module.imports_parsed {
             for ban in banned {
-                out.extend(check_singleton_import(imp, ban, module, rid, rname, sev, cat));
+                out.extend(check_singleton_import(
+                    imp, ban, module, rid, rname, sev, cat,
+                ));
             }
         }
         out
@@ -256,7 +260,9 @@ impl Rule for MockExportValidationRule {
 
             let source_module = resolve_mock_source_module(mock, module, ctx, graph);
             if let Some(sm) = source_module {
-                violations.extend(validate_factory_keys(mock, sm, module, rid, rname, sev, cat));
+                violations.extend(validate_factory_keys(
+                    mock, sm, module, rid, rname, sev, cat,
+                ));
             }
         }
 
@@ -384,12 +390,22 @@ fn check_singleton_import(
     let mut out = Vec::new();
     for name in &imp.named {
         if ban.names.iter().any(|n| n == name) {
-            out.push(make_singleton_violation(name, imp, module, rule_id, rule_name, severity, category));
+            out.push(make_singleton_violation(
+                name, imp, module, rule_id, rule_name, severity, category,
+            ));
         }
     }
     if let Some(default_name) = &imp.default {
         if ban.names.iter().any(|n| n == default_name) {
-            out.push(make_singleton_violation(default_name, imp, module, rule_id, rule_name, severity, category));
+            out.push(make_singleton_violation(
+                default_name,
+                imp,
+                module,
+                rule_id,
+                rule_name,
+                severity,
+                category,
+            ));
         }
     }
     out
