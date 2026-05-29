@@ -2,10 +2,10 @@
 id: ADR-005
 kind: adr
 title: Lint Rule Architecture
-status: draft
+status: accepted
 date: 2026-05-17T00:00:00.000Z
-authors: []
-reviewers: []
+authors: [Jonathan Gadea Harder]
+reviewers: [Jonathan Gadea Harder]
 tags: []
 supersedes: []
 superseded_by: []
