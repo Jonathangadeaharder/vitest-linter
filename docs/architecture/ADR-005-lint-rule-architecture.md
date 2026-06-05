@@ -22,7 +22,7 @@ checksum: b214362d6987fe751115cbc3df4fc0ce295f5d5de5fab18f38abed0515be943e
 
 ## Context
 
-vitest-linter must support 65 lint rules (8 stable + 57 unstable) across 7 categories. Rules need to analyze tree-sitter AST data, respect config overrides, support inline suppression, and gate by test runtime. The architecture must make adding new rules mechanical.
+vitest-linter must support 66 lint rules (8 stable + 58 unstable) across 6 categories. Rules need to analyze tree-sitter AST data, respect config overrides, support inline suppression, and gate by test runtime. The architecture must make adding new rules mechanical.
 
 ## Decision
 
@@ -48,26 +48,26 @@ Two registration functions in `src/rules/mod.rs`:
 | Function | Purpose | Rules |
 |----------|---------|-------|
 | `v1_0_rules()` | Active by default (no flag) | 8 community-hit rules |
-| `all_rules()` | Behind `--unstable-rules` | All 65 rules |
+| `all_rules()` | Behind `--unstable-rules` | All 66 rules |
 
 The engine checks `config.rules.is_disabled(rule_id)` before calling `check()`.
 
 ### Categories
 
+The `Category` enum has 6 variants. Rules are assigned categories by what they
+detect, not by their ID prefix — e.g. `VITEST-NO-001` has `Structure` category,
+not a `No-*` category.
+
 ```
-Flakiness (5)    - VITEST-FLK-*    → Non-deterministic test behavior
-Maintenance (18) - VITEST-MNT-*   → Code quality and test hygiene
-Structure (9)    - VITEST-STR-*   → Test organization and nesting
-Dependencies (7) - VITEST-DEP-*    → Mock and import isolation
-Validation (5)   - VITEST-VAL-*   → Correct test API usage
-Playwright (13)  - VITEST-PW-*    → Playwright E2E best practices
-No-* (10)        - VITEST-NO-*    → Banned patterns
-Prefer-* (10)    - VITEST-PREF-*  → Idiomatic matchers
-Require-* (3)    - VITEST-REQ-*   → Required patterns
-Consistency (3)  - VITEST-CON-*   → Consistent style
+Flakiness (5)     - Non-deterministic test behavior (VITEST-FLK-*)
+Maintenance (18)  - Code quality and test hygiene (VITEST-MNT-* + several NO/PREF/CON rules)
+Structure (9)     - Test organization and nesting (VITEST-STR-* + several NO/PREF/REQ/CON rules)
+Dependencies (7)  - Mock and import isolation (VITEST-DEP-* + NO-007, PREF-005, CON-003)
+Validation (14)   - Correct test API usage (VITEST-VAL-* + several NO/PREF/REQ rules)
+Playwright (13)   - Playwright E2E best practices (VITEST-PW-*)
 ```
 
-Total: 66 (8 stable + 58 unstable). Duplicate: 66 rules in `all_rules()` test.
+Total: 66 (8 stable + 58 unstable). 66 rules in `all_rules()` test.
 
 ### AST-Based Analysis
 

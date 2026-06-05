@@ -23,19 +23,19 @@ checksum: a315273f9c4c04e2ea67945e0b823615652c6e2357289b582b18fabf1602bd4d
 
 ## Executive Summary
 
-vitest-linter v0.1.0 is a well-architected Rust CLI using tree-sitter for AST-level test smell detection across 65 rules (8 stable, 57 unstable). Multi-channel distribution (cargo-dist for 5 platforms, npm, VSCode extension, GitHub Action, ESLint plugin, sigstore signing) is excellent. The 8:57 stable-to-unstable ratio is the main maturity signal -- unstable rules may change behavior between releases. No coverage threshold in CI and no cargo audit. Recommendation: add dependency scanning, define rule lifecycle policy, and enforce coverage.
+vitest-linter v1.0.0 is a well-architected Rust CLI using tree-sitter for AST-level test smell detection across 66 rules (8 stable, 58 unstable). Multi-channel distribution (cargo-dist for 5 platforms, npm, VSCode extension, GitHub Action, ESLint plugin, sigstore signing) is excellent. The 8:58 stable-to-unstable ratio is the main maturity signal -- unstable rules may change behavior between releases. No coverage threshold in CI and no cargo audit. Recommendation: add dependency scanning, define rule lifecycle policy, and enforce coverage.
 
 ## Scope
 
-Assessed: 65 rules across 9 categories (Flakiness, Maintenance, Consistency, Dependencies, Validation, No-*, Prefer-*, Require-*, Playwright), tree-sitter AST engine, CLI + npm + VSCode + GitHub Action + ESLint plugin distribution channels, cargo-dist build with sigstore, criterion benchmarks, cargo-mutants mutation testing, SonarCloud, 5 ADRs. Excluded: IDE integration beyond VSCode, Docker distribution, fuzz testing.
+Assessed: 66 rules across 6 categories (Flakiness, Maintenance, Structure, Dependencies, Validation, Playwright), tree-sitter AST engine, CLI + npm + VSCode + GitHub Action + ESLint plugin distribution channels, cargo-dist build with sigstore, criterion benchmarks, cargo-mutants mutation testing, SonarCloud, 5 ADRs. Excluded: IDE integration beyond VSCode, Docker distribution, fuzz testing.
 
 ## Architecture
 
-Single Rust crate with modular rule engine -- 9 rule categories as separate modules registered via mod.rs. tree-sitter produces CST/AST for pattern matching. Comment-based suppression system (`// vitest-linter-ignore`) with mutation testing evidence. Multi-format output: terminal (colored), JSON, SARIF. Zero-config defaults with optional `vitest-linter.toml`. Multi-channel distribution via cargo-dist covering 5 target triples (macOS aarch64/x86_64, Linux aarch64/x86_64, Windows x86_64). npm and VSCode wrapper packages download the prebuilt binary.
+Single Rust crate with modular rule engine -- rules organized by ID prefix across 9 source modules, with 6 `Category` enum variants for classification. tree-sitter produces CST/AST for pattern matching. Comment-based suppression system (`// vitest-linter-disable-next-line` / `// vitest-linter-disable` / `// vitest-linter-enable`) with mutation testing evidence. Multi-format output: terminal (colored), JSON, SARIF. Zero-config defaults with optional `vitest-linter.toml`. Multi-channel distribution via cargo-dist covering 5 target triples (macOS aarch64/x86_64, Linux aarch64/x86_64, Windows x86_64). npm and VSCode wrapper packages download the prebuilt binary.
 
 ## Tech Stack
 
-Rust 2021 edition, tree-sitter 0.24 + tree-sitter-typescript 0.23, clap 4 (derive), serde + serde_json, anyhow, colored, walkdir, toml 0.8, globset, rayon. Build: cargo-dist 0.28, sigstore signing, thin LTO. Benchmarks: criterion with HTML reports. Mutation: cargo-mutants. CI: format + clippy (nightly, pedantic+nursery) + test + coverage. Quality: SonarCloud.
+Rust 2021 edition, tree-sitter 0.24 + tree-sitter-typescript 0.23, clap 4 (derive), serde + serde_json, anyhow, colored, walkdir, toml 0.8, globset, rayon. Build: cargo-dist 0.31, sigstore signing, thin LTO. Benchmarks: criterion with HTML reports. Mutation: cargo-mutants. CI: format + clippy (nightly, pedantic+nursery) + test + coverage. Quality: SonarCloud.
 
 ## Code Quality
 
@@ -61,7 +61,7 @@ criterion benchmarks for large corpus linting. tree-sitter parsing scales linear
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| 57 unstable rules with no graduation criteria | Medium | Medium | Document rule lifecycle policy |
+| 58 unstable rules with no graduation criteria | Medium | Medium | Document rule lifecycle policy |
 | No coverage threshold in CI | Medium | Medium | Add cargo-llvm-cov gate with minimum threshold |
 | No cargo audit in CI | Medium | Medium | Add cargo audit step |
 | npm postinstall may fail in restricted envs | Low | Medium | Document alternative install methods |

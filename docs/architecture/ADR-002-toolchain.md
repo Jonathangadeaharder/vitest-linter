@@ -34,7 +34,7 @@ The project needs a consistent Rust toolchain for building, linting, formatting,
 | `cargo-llvm-cov` | nightly with `llvm-tools-preview` | CLI args | Branch coverage (`--fail-under-lines 90`) |
 | `cargo-audit` | stable | `Cargo.lock` | Dependency vulnerability scanning |
 | `cargo-mutants` | stable | `.cargo/mutants.toml` | Mutation testing (score ≥75% gate) |
-| `cargo-dist` | 0.28.0 | `Cargo.toml` (workspace metadata) | Binary release + npm publishing |
+| `cargo-dist` | 0.31.0 | `Cargo.toml` (workspace metadata) | Binary release + npm publishing |
 | `cargo-deny` | stable (planned) | `deny.toml` (planned) | License + duplicate dep checking |
 | `structurelint` | Go 1.24 | `.structurelint.yml` | Repo structure linting |
 
