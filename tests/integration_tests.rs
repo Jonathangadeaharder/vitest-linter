@@ -1277,6 +1277,8 @@ test('bad syntax' () => {
         result.is_ok(),
         "Parser should handle syntax errors gracefully"
     );
+    let output = result.unwrap();
+    assert!(output.test_blocks.is_empty());
 }
 
 #[test]
