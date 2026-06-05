@@ -4,7 +4,7 @@ A fast, zero-config test-smell linter for TypeScript/JavaScript Vitest test suit
 
 ## Features
 
-- **8 must-have rules** active by default for v1.0 (65 total behind `--unstable-rules`)
+- **8 must-have rules** active by default for v1.0 (66 total behind `--unstable-rules`)
 - Optional `.vitest-linter.toml` for project-specific banlists (DI rules)
 - Recursive file discovery via [walkdir](https://docs.rs/walkdir)
 - Tree-sitter-powered AST analysis (TypeScript **and** TSX/JSX)
@@ -52,7 +52,8 @@ vitest-linter --unstable-rules
 
 > **8 must-have rules** active by default for v1.0. These catch the most
 > real-world pain (high signal, low false-positive). Pass `--unstable-rules`
-> to access the full set of 65 rules across 5 categories.
+> to access the full set of 66 rules across 6 categories (organized into 10
+> rule groups by ID prefix).
 
 ### v1.0 Rules (active by default)
 
@@ -64,7 +65,7 @@ real codebases with minimal noise.
 | VITEST-MNT-007 | FocusedTestRule | Error | `it.only` / `test.only` / `describe.only` left in source |
 | VITEST-MNT-005 | EmptyTestRule | Info | `it.skip` / `test.todo` left in source |
 | VITEST-NO-003 | NoCommentedOutTestsRule | Maintenance | Commented-out `it(` / `test(` / `describe(` lines |
-| VITEST-MNT-006 | MissingAwaitAssertionRule | Error | `.resolves` or `.rejects` assertion not preceded by `await` |
+| VITEST-MNT-006 | MissingAwaitAssertionRule | Warning | `.resolves` or `.rejects` assertion not preceded by `await` |
 | VITEST-FLK-001 | TimeoutRule | Warning | `setTimeout`/`setInterval` used inside a test without fake timers |
 | VITEST-MNT-004 | TryCatchRule | Warning | `try/catch` inside a test — prefer `expect().toThrow()` |
 | VITEST-MNT-003 | ConditionalLogicRule | Warning | `if` or `switch` statement inside a test body |
@@ -94,9 +95,12 @@ are still being validated against real-world repos and may produce false positiv
 | VITEST-MNT-003 | ConditionalLogicRule | Warning | `if` or `switch` statement inside a test body |
 | VITEST-MNT-004 | TryCatchRule | Warning | `try/catch` inside a test — prefer `expect().toThrow()` |
 | VITEST-MNT-005 | EmptyTestRule | Info | `it.skip` / `test.todo` left in source |
-| VITEST-MNT-006 | MissingAwaitAssertionRule | Error | `.resolves` or `.rejects` assertion not preceded by `await` |
+| VITEST-MNT-006 | MissingAwaitAssertionRule | Warning | `.resolves` or `.rejects` assertion not preceded by `await` |
 | VITEST-MNT-007 | FocusedTestRule | Error | `it.only` / `test.only` / `describe.only` left in source |
 | VITEST-MNT-008 | MissingMockCleanupRule | Warning | `vi.mock()` without `afterEach` cleanup (`vi.restoreAllMocks()` / `vi.clearAllMocks()`) |
+| VITEST-MNT-009 | WeakAssertionRule | Warning | All assertions in a test are weak (`toBeDefined()`, `toBeTruthy()`, `not.toThrow()`) — verify actual behavior |
+| VITEST-MNT-010 | ImplementationCoupledRule | Warning | Test file is tightly coupled to a single module's implementation — test count ≈ export count with >80% name match |
+| VITEST-MNT-011 | TestIdNegativePresenceRule | Warning | Uses `getByTestId` but has no negative-presence assertion — missing coverage for element absence |
 
 ### Structure (VITEST-STR-*)
 
@@ -108,23 +112,25 @@ are still being validated against real-world repos and may produce false positiv
 ### Dependencies (VITEST-DEP-*)
 
 Catch test-isolation bugs that arise from module-level mocking of singleton
-infrastructure. Active only when `.vitest-linter.toml` configures a banlist.
+infrastructure. DEP-001 also fires on stable dependencies (pure functions,
+data models) detected via heuristics. DEP-002 requires a configured banlist.
 
 | Rule ID | Name | Severity | Description |
 |---------|------|----------|-------------|
-| VITEST-DEP-001 | BannedModuleMockRule | Error | `vi.mock(<path>)` at module scope where path matches a configured banlist (e.g. shared `db`/`eventBus`/`container`). Such mocks leak across test files via the module cache and silently corrupt downstream tests. Refactor the target service to accept dependencies via constructor (DI). |
+| VITEST-DEP-001 | BannedModuleMockRule | Error | `vi.mock(<path>)` at module scope where path matches a configured banlist (e.g. shared `db`/`eventBus`/`container`) or is detected as a stable dependency (pure functions, data models, utils). Mocking stable deps indicates a DI problem. Refactor the target service to accept dependencies via constructor (DI). |
 | VITEST-DEP-002 | ProductionSingletonImportRule | Error | Unit test imports a configured production singleton. Importing the singleton triggers its constructor side effects (event-handler registration, DB connections) on the production wiring. Construct a fresh instance with fakes; production singletons belong in `*.integration.test.ts` only. |
-| VITEST-DEP-003 | ResetEscapeHatchRule | Warning | `vi.resetModules()` / `vi.restoreAllMocks()` / `vi.unmock()` inside `beforeEach`/`beforeAll`/`afterEach`/`afterAll`. These mask underlying coupling between test files instead of fixing it. |
+| VITEST-DEP-003 | ResetEscapeHatchRule | Warning | `vi.resetModules()` / `vi.restoreAllMocks()` / `vi.unmock()` / `vi.doUnmock()` inside `beforeEach`/`beforeAll`/`afterEach`/`afterAll`. These mask underlying coupling between test files instead of fixing it. |
+| VITEST-DEP-004 | MockExportValidationRule | Warning | `vi.mock()` factory returns a key that is not exported by the source module |
 
 ### Validation (VITEST-VAL-*)
 
 | Rule ID | Name | Severity | Description |
 |---------|------|----------|-------------|
 | VITEST-VAL-001 | ValidExpectRule | Error | `expect()` call missing `.toBe()` or similar assertion — promise silently swallowed |
-| VITEST-VAL-002 | ValidExpectInPromiseRule | Error | `expect()` inside a `.then()` / `catch()` without `return` — assertion may never run |
-| VITEST-VAL-003 | ValidDescribeCallbackRule | Error | `describe()` with no callback or a non-function callback |
-| VITEST-VAL-004 | ValidTitleRule | Warning | Test/describe title is empty, a duplicate, or not a string literal |
-| VITEST-VAL-005 | NoUnneededAsyncExpectFunctionRule | Warning | Using `expect(await ...)` or `.resolves` with an already-sync matcher |
+| VITEST-VAL-002 | ValidExpectInPromiseRule | Error | `return expect(...)` instead of `await expect(...)` — assertion may fail silently |
+| VITEST-VAL-003 | ValidDescribeCallbackRule | Error | `describe()` with an `async` callback — must be synchronous |
+| VITEST-VAL-004 | ValidTitleRule | Warning | Test/describe title is empty or a template literal — prefer static string titles |
+| VITEST-VAL-005 | NoUnneededAsyncExpectFunctionRule | Warning | `expect(async () => {...})` wrapping async function unnecessarily — use `.resolves` / `.rejects` instead |
 
 ### No-* (VITEST-NO-*)
 
@@ -133,7 +139,7 @@ infrastructure. Active only when `.vitest-linter.toml` configures a banlist.
 | VITEST-NO-001 | NoStandaloneExpectRule | Error | `expect()` call outside any `it`/`test` body |
 | VITEST-NO-002 | NoIdenticalTitleRule | Error | Two `it`/`describe` blocks in the same scope share the same title |
 | VITEST-NO-003 | NoCommentedOutTestsRule | Maintenance | Commented-out `it(` / `test(` / `describe(` lines |
-| VITEST-NO-005 | NoTestPrefixesRule | Warning | `test.skip` / `test.only` used instead of `it.skip` / `it.only` |
+| VITEST-NO-005 | NoTestPrefixesRule | Warning | `fit()` / `xit()` used — use `test.skip()` / `test.only()` instead |
 | VITEST-NO-006 | NoDuplicateHooksRule | Warning | Multiple `beforeEach` / `afterEach` / etc. in the same `describe` |
 | VITEST-NO-007 | NoImportNodeTestRule | Error | `import ... from 'node:test'` in a Vitest project |
 | VITEST-NO-008 | NoInterpolationInSnapshotsRule | Warning | Template literal with `${}` inside `toMatchSnapshot()` |
@@ -171,6 +177,27 @@ infrastructure. Active only when `.vitest-linter.toml` configures a banlist.
 | VITEST-CON-001 | ConsistentTestItRule | Maintenance | Mix of `test()` and `it()` in the same file — pick one |
 | VITEST-CON-003 | ConsistentVitestViRule | Dependencies | Mix of `vi` named import and `vitest` namespace import |
 | VITEST-CON-004 | HoistedApisOnTopRule | Structure | `vi.mock()` / `vi.hoisted()` calls should precede all `test`/`it`/`describe` blocks |
+
+### Playwright (VITEST-PW-*)
+
+Best-practice rules for Playwright E2E test files. These rules only fire when
+the test runtime is detected as Playwright (via `@playwright/test` imports).
+
+| Rule ID | Name | Severity | Description |
+|---------|------|----------|-------------|
+| VITEST-PW-001 | PwWaitForTimeoutRule | Warning | `waitForTimeout` causes flaky waits — prefer auto-retry assertions |
+| VITEST-PW-002 | PwCssIdSelectorRule | Warning | CSS ID selector used — IDs may not be stable across app updates |
+| VITEST-PW-003 | PwXPathSelectorRule | Warning | XPath selectors are brittle — prefer role/text/accessible-name locators |
+| VITEST-PW-004 | PwLocatorNthRule | Warning | `.nth()` positional locator is fragile — DOM order may change |
+| VITEST-PW-005 | PwPageDollarRule | Warning | `page.$` / `page.$$` returns raw ElementHandle — prefer locator API |
+| VITEST-PW-006 | PwEvaluateInnerTextRule | Warning | `page.evaluate` with `innerText` — prefer ARIA text assertions or `getByText` |
+| VITEST-PW-007 | PwTextAssertionOverRoleRule | Info | `getByText` used — prefer `getByRole` for interactive elements |
+| VITEST-PW-008 | PwTestIdOverSemanticRoleRule | Info | Only `getByTestId` locators — prefer semantic role/text locators |
+| VITEST-PW-009 | PwDuplicateSpecFileRule | Warning | Spec file name overlaps with another Playwright file — consolidate |
+| VITEST-PW-010 | PwArbitrarySleepRule | Warning | Arbitrary `setTimeout` in Promise — prefer Playwright auto-waiting assertions |
+| VITEST-PW-011 | PwHardCssClassChainRule | Warning | Hard CSS class selector chain — fragile to DOM structure changes |
+| VITEST-PW-012 | PwMissingWebFirstAssertionRule | Warning | Playwright calls without accessor locators — use web-first assertions |
+| VITEST-PW-100 | PwMissingAxeScanRule | Info | No axe accessibility scan — consider `@axe-core/playwright` |
 
 ## Configuration (`.vitest-linter.toml`)
 
@@ -237,8 +264,9 @@ test('has conditionals', () => {
 // vitest-linter-enable VITEST-MNT-003
 ```
 
-If no config file exists, DEP-001 and DEP-002 are inactive (no banlist → no
-violations); DEP-003 still runs with its built-in defaults.
+If no config file exists, DEP-002 is inactive (no banlist → no
+violations); DEP-001 still fires on stable dependencies (pure functions, data
+models) detected via heuristics; DEP-003 still runs with its built-in defaults.
 
 ## Supported File Extensions
 

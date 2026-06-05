@@ -41,7 +41,7 @@ src/
     mod.rs         # Rule trait, v1_0_rules(), all_rules() registration
     flakiness.rs   # VITEST-FLK-* rules
     maintenance.rs # VITEST-MNT-* rules
-    no_rules.rs    # VITEST-NO-* rules
+    no_category.rs # VITEST-NO-* rules
     prefer.rs      # VITEST-PREF-* rules
     require.rs     # VITEST-REQ-* rules
     consistency.rs # VITEST-CON-* rules

@@ -56,7 +56,7 @@ Override any rule severity in your ESLint config:
 
 ## Rules
 
-The plugin exposes one ESLint rule per vitest-linter rule (65 total). Each rule maps to the corresponding `VITEST-*` diagnostic from the standalone CLI.
+The plugin exposes one ESLint rule per vitest-linter rule (66 total). Each rule maps to the corresponding `VITEST-*` diagnostic from the standalone CLI.
 
 | ESLint rule | Linter ID |
 |---|---|
@@ -77,6 +77,7 @@ The plugin exposes one ESLint rule per vitest-linter rule (65 total). Each rule 
 | `missing-mock-cleanup` | VITEST-MNT-008 |
 | `weak-assertion` | VITEST-MNT-009 |
 | `implementation-coupled` | VITEST-MNT-010 |
+| `test-id-negative-presence` | VITEST-MNT-011 |
 | `banned-module-mock` | VITEST-DEP-001 |
 | `production-singleton-import` | VITEST-DEP-002 |
 | `reset-escape-hatch` | VITEST-DEP-003 |
@@ -113,15 +114,15 @@ The plugin exposes one ESLint rule per vitest-linter rule (65 total). Each rule 
 | `consistent-vitest-vi` | VITEST-CON-003 |
 | `hoisted-apis-on-top` | VITEST-CON-004 |
 | `pw-wait-for-timeout` | VITEST-PW-001 |
-| `pw-evaluate-inner-text` | VITEST-PW-002 |
-| `pw-css-id-selector` | VITEST-PW-003 |
-| `pw-xpath-selector` | VITEST-PW-004 |
-| `pw-locator-nth` | VITEST-PW-005 |
-| `pw-arbitrary-sleep` | VITEST-PW-006 |
+| `pw-css-id-selector` | VITEST-PW-002 |
+| `pw-xpath-selector` | VITEST-PW-003 |
+| `pw-locator-nth` | VITEST-PW-004 |
+| `pw-page-dollar` | VITEST-PW-005 |
+| `pw-evaluate-inner-text` | VITEST-PW-006 |
+| `pw-arbitrary-sleep` | VITEST-PW-010 |
 | `pw-text-assertion-over-role` | VITEST-PW-007 |
 | `pw-test-id-over-semantic-role` | VITEST-PW-008 |
 | `pw-duplicate-spec-file` | VITEST-PW-009 |
-| `pw-page-dollar` | VITEST-PW-010 |
 | `pw-hard-css-class-chain` | VITEST-PW-011 |
 | `pw-missing-web-first-assertion` | VITEST-PW-012 |
 | `pw-missing-axe-scan` | VITEST-PW-100 |
