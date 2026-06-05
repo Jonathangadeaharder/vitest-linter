@@ -44,7 +44,7 @@ pub mod consistency;
 pub mod dependencies;
 pub mod flakiness;
 pub mod maintenance;
-pub mod no_rules;
+pub mod no_category;
 pub mod playwright;
 pub mod prefer;
 pub mod require;
@@ -63,7 +63,7 @@ pub fn v1_0_rules() -> Vec<Box<dyn Rule>> {
         // NoSkipRule — it.skip / test.todo left in source
         Box::new(maintenance::EmptyTestRule),
         // NoCommentedTestsRule — commented-out test bodies
-        Box::new(no_rules::NoCommentedOutTestsRule),
+        Box::new(no_category::NoCommentedOutTestsRule),
         // AsyncWithoutAwaitRule — async test with no await (silent pass)
         Box::new(maintenance::MissingAwaitAssertionRule),
         // SetTimeoutInTestRule — real setTimeout in tests (flaky-time)
@@ -108,16 +108,16 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(validation::ValidTitleRule),
         Box::new(validation::NoUnneededAsyncExpectFunctionRule),
         // E12: No-rules
-        Box::new(no_rules::NoStandaloneExpectRule),
-        Box::new(no_rules::NoIdenticalTitleRule),
-        Box::new(no_rules::NoCommentedOutTestsRule),
-        Box::new(no_rules::NoTestPrefixesRule),
-        Box::new(no_rules::NoDuplicateHooksRule),
-        Box::new(no_rules::NoImportNodeTestRule),
-        Box::new(no_rules::NoInterpolationInSnapshotsRule),
-        Box::new(no_rules::NoLargeSnapshotsRule),
-        Box::new(no_rules::NoDoneCallbackRule),
-        Box::new(no_rules::NoConditionalExpectRule),
+        Box::new(no_category::NoStandaloneExpectRule),
+        Box::new(no_category::NoIdenticalTitleRule),
+        Box::new(no_category::NoCommentedOutTestsRule),
+        Box::new(no_category::NoTestPrefixesRule),
+        Box::new(no_category::NoDuplicateHooksRule),
+        Box::new(no_category::NoImportNodeTestRule),
+        Box::new(no_category::NoInterpolationInSnapshotsRule),
+        Box::new(no_category::NoLargeSnapshotsRule),
+        Box::new(no_category::NoDoneCallbackRule),
+        Box::new(no_category::NoConditionalExpectRule),
         // E13: Prefer-rules
         Box::new(prefer::PreferToBeRule),
         Box::new(prefer::PreferToContainRule),
