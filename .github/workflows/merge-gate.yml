@@ -13,6 +13,7 @@ jobs:
   repo-hygiene:
     name: Repo Hygiene
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Check for iCloud sync conflicts
@@ -26,6 +27,7 @@ jobs:
   rust-quality:
     name: Rust Quality
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -44,6 +46,7 @@ jobs:
   dependency-scan:
     name: Dependency Scan
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy filesystem scan
@@ -58,6 +61,7 @@ jobs:
   secret-scanning:
     name: Secret Scanning
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +74,7 @@ jobs:
   codeql:
     name: CodeQL
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     permissions:
       security-events: write
     steps:
@@ -86,6 +91,7 @@ jobs:
   sonarcloud:
     name: SonarCloud Code Analysis
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,7 +103,8 @@ jobs:
 
   required-checks:
     name: Required Checks (Merge)
-    runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs:
       - repo-hygiene
       - rust-quality

@@ -6,6 +6,7 @@ on:
 jobs:
   review:
     runs-on: ["self-hosted", "macOS", "ARM64", "VidiomTM"]
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
