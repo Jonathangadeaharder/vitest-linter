@@ -1,0 +1,96 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ocr-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ocr-review:
+    name: OpenCodeReview
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Run OpenCodeReview
+        id: ocr
+        run: |
+          OUTPUT=$(ocr review \
+            --from "origin/${{ github.base_ref }}" \
+            --to HEAD \
+            --format json \
+            --audience agent \
+            --repo "$PWD" \
+            2>/dev/null)
+
+          echo "$OUTPUT" > /tmp/ocr-output.json
+          COMMENTS=$(echo "$OUTPUT" | jq '.summary.comments')
+          echo "comments=$COMMENTS" >> "$GITHUB_OUTPUT"
+
+          if [ "$COMMENTS" -eq 0 ]; then
+            echo "✅ No issues found by OpenCodeReview"
+          else
+            echo "❌ $COMMENTS issue(s) found by OpenCodeReview"
+          fi
+
+      - name: Post inline review comments
+        if: steps.ocr.outputs.comments != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+
+          # Get the latest commit SHA on the PR
+          HEAD_SHA=$(git rev-parse HEAD)
+
+          # Read each comment from OCR output and post as inline PR review comment
+          jq -c '.comments[]' /tmp/ocr-output.json | while IFS= read -r comment; do
+            PATH_VAL=$(echo "$comment" | jq -r '.path')
+            START_LINE=$(echo "$comment" | jq -r '.start_line')
+            END_LINE=$(echo "$comment" | jq -r '.end_line')
+            CONTENT=$(echo "$comment" | jq -r '.content')
+            SUGGESTION=$(echo "$comment" | jq -r '.suggestion_code // empty')
+
+            # Build comment body with suggestion code block if available
+            BODY=""
+            if [ -n "$SUGGESTION" ]; then
+              BODY="${CONTENT}
+
+\`\`\`suggestion
+${SUGGESTION}
+\`\`\`"
+            else
+              BODY="${CONTENT}"
+            fi
+
+            # Post as inline review comment via GitHub API
+            gh api "repos/${REPO}/pulls/${PR_NUMBER}/comments" \
+              -f body="$BODY" \
+              -f path="$PATH_VAL" \
+              -f start_line="$START_LINE" \
+              -f line="$END_LINE" \
+              -f commit_id="$HEAD_SHA" \
+              -H "Accept: application/vnd.github+json" 2>/dev/null && \
+              echo "Posted comment on $PATH_VAL:$START_LINE-$END_LINE" || \
+              echo "Failed to post comment on $PATH_VAL:$START_LINE-$END_LINE"
+          done
+
+      - name: Gate (fail if issues found)
+        if: steps.ocr.outputs.comments != '0'
+        run: |
+          echo "::error::OpenCodeReview found ${{ steps.ocr.outputs.comments }} issue(s). See inline review comments."
+          exit 1
