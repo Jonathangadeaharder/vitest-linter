@@ -1,0 +1,101 @@
+name: AI Code Review
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: ocr-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ocr-review:
+    name: OpenCodeReview
+    runs-on: [self-hosted, macOS, ARM64]
+    env:
+      HOME: /Users/jonathangadeaharder
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+      - name: Run OpenCodeReview
+        id: ocr
+        shell: bash {0}
+        run: |
+          set +e
+          export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+          export HOME=/Users/jonathangadeaharder
+          WORK_DIR="${{ github.workspace }}"
+          /usr/local/bin/ocr review --from "origin/${{ github.base_ref }}" --to HEAD --format json --audience agent --repo "$PWD" > "$WORK_DIR/ocr-output.json" 2>"$WORK_DIR/ocr-stderr.log"
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::OpenCodeReview failed with exit code $EXIT_CODE"
+            echo "=== STDERR ==="
+            cat "$WORK_DIR/ocr-stderr.log"
+            echo "=== STDOUT ==="
+            cat "$WORK_DIR/ocr-output.json"
+            exit 1
+          fi
+          COMMENTS=$(jq '.summary.comments // 0' "$WORK_DIR/ocr-output.json" 2>/dev/null)
+          if [ -z "$COMMENTS" ] || [ "$COMMENTS" = "null" ]; then
+            echo "::error::OpenCodeReview produced invalid JSON output"
+            echo "=== STDOUT ==="
+            cat "$WORK_DIR/ocr-output.json"
+            echo "=== STDERR ==="
+            cat "$WORK_DIR/ocr-stderr.log"
+            exit 1
+          fi
+          echo "comments=$COMMENTS" >> "$GITHUB_OUTPUT"
+          echo "OCR found $COMMENTS comment(s)"
+      - name: Post review comments
+        if: steps.ocr.outputs.comments != '0' && steps.ocr.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          HEAD_SHA=$(git rev-parse HEAD)
+          WORK_DIR="${{ github.workspace }}"
+          POSTED=0
+          FAILED=0
+          while IFS= read -r comment; do
+            PATH_VAL=$(echo "$comment" | jq -r '.path')
+            START_LINE=$(echo "$comment" | jq -r '.start_line')
+            END_LINE=$(echo "$comment" | jq -r '.end_line')
+            CONTENT=$(echo "$comment" | jq -r '.content')
+            SUGGESTION=$(echo "$comment" | jq -r '.suggestion_code // empty')
+            if [ -n "$SUGGESTION" ]; then
+              BODY=$(printf '%s\n\n```suggestion\n%s\n```' "$CONTENT" "$SUGGESTION")
+            else
+              BODY="$CONTENT"
+            fi
+            gh api "repos/${REPO}/pulls/${PR_NUMBER}/comments" \
+              -f body="$BODY" \
+              -f path="$PATH_VAL" \
+              -F start_line="$START_LINE" \
+              -F line="$END_LINE" \
+              -f commit_id="$HEAD_SHA" \
+              -H "Accept: application/vnd.github+json" 2>/dev/null
+            if [ $? -eq 0 ]; then
+              POSTED=$((POSTED + 1))
+            else
+              FAILED=$((FAILED + 1))
+            fi
+          done < <(jq -c '.comments[]' "$WORK_DIR/ocr-output.json")
+          if [ "$FAILED" -gt 0 ] && [ "$POSTED" -eq 0 ]; then
+            SUMMARY=$(jq -r '.comments[] | "**\(.path):\(.start_line)-\(.end_line)**\n\(.content)\n"' "$WORK_DIR/ocr-output.json")
+            gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="## OpenCodeReview found ${{ steps.ocr.outputs.comments }} issue(s)
+
+          $SUMMARY" 2>/dev/null
+          fi
+          exit 0
+      - name: Gate
+        if: steps.ocr.outputs.comments != '0' && steps.ocr.outputs.exit_code == '0'
+        run: |
+          echo "::error::OpenCodeReview found ${{ steps.ocr.outputs.comments }} issue(s). See review comments."
+          exit 1
